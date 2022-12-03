@@ -1,81 +1,112 @@
 #include <iostream>
 #include <fstream>
-#include <algorithm>
-// #include <vector>
-#include <map>
 
 #define BUFSIZE 1024
 /** used in processing */
-int32_t *play;
-int32_t *data1;
-int32_t *data2;
+
+char *data1;
+char *data2;
 int32_t cnt;
 size_t length;
 /** add additional */
 
-bool map_input(int32_t *dst, int32_t offset, char input)
+int32_t map_input(char input)
 {
-    bool entry = true;
+    int32_t mapped = 0;
     switch (input)
     {
     case 'A':
-        dst[offset] = 1;
+        mapped = 1;
         break;
     case 'B':
-        dst[offset] = 2;
+        mapped = 2;
         break;
     case 'C':
-        dst[offset] = 3;
+        mapped = 3;
         break;
     case 'X':
-        dst[offset] = 1;
+        mapped = 1;
         break;
     case 'Y':
-        dst[offset] = 2;
+        mapped = 2;
         break;
     case 'Z':
-        dst[offset] = 3;
+        mapped = 3;
         break;
 
     default:
-        entry = false;
         break;
     }
-    return entry;
+    return mapped;
 }
-void map_play(int32_t *dst, int32_t offset, char pA, char pB)
+int32_t map_rule1(char playerA, char playerB)
 {
-    if (pA == 'A') // player a is rock
+    if (playerA == 'A') // player a is rock
     {
-        if (pB == 'Y')       // player B is paper
-            dst[offset] = 1; // B win
-        else if (pB == 'X')
-            dst[offset] = 0; // draw
+        if (playerB == 'Y') // player B is platerAper
+            return 6;       // B win
+        else if (playerB == 'X')
+            return 3; // draw
         else
-            dst[offset] = -1; // B lose
-        return;
+            return 0; // B lose
     }
-    if (pA == 'B') // player a is paper
+    if (playerA == 'B') // player a is platerAper
     {
-        if (pB == 'Z')       // player B is scissors
-            dst[offset] = 1; // B win
-        else if (pB == 'Y')
-            dst[offset] = 0; // draw
+        if (playerB == 'Z') // player B is scissors
+            return 6;       // B win
+        else if (playerB == 'Y')
+            return 3; // draw
         else
-            dst[offset] = -1; // B lose
+            return 0; // B lose
+    }
+    if (playerA == 'C') // player a is scissors
+    {
+        if (playerB == 'X') // player B is rock
+            return 6;       // B win
+        else if (playerB == 'Z')
+            return 3; // draw
+        else
+            return 0; // B lose
+    }
+    return 0;
+}
+int32_t map_rule2(char playerA, char playRes)
+{
+    /**
+     * x,y,z = lose,draw,win
+     * a = c,a,b
+     * b = a,b,c
+     * c = b,c,a
+     */
 
-        return;
-    }
-    if (pA == 'C') // player a is scissors
+    if (playerA == 'A') // player a is rock
     {
-        if (pB == 'X')       // player B is rock
-            dst[offset] = 1; // B win
-        else if (pB == 'Z')
-            dst[offset] = 0; // draw
+        if (playRes == 'X')
+            return 3 + 0;
+        else if (playRes == 'Y')
+            return 1 + 3;
         else
-            dst[offset] = -1; // B lose
-        return;
+            return 2 + 6;
     }
+    if (playerA == 'B') // player a is paper
+    {
+        if (playRes == 'X')
+            return 1 + 0;
+        else if (playRes == 'Y')
+            return 2 + 3;
+        else
+            return 3 + 6;
+    }
+    if (playerA == 'C') // player a is scissors
+    {
+        if (playRes == 'X')
+            return 2 + 0;
+        else if (playRes == 'Y')
+            return 3 + 3;
+        else
+            return 1 + 6;
+    }
+    return 0;
 }
 
 void read_input(const char *filename)
@@ -90,9 +121,8 @@ void read_input(const char *filename)
     length = ifs.tellg();
     ifs.seekg(0, std::ifstream::beg);
 
-    data1 = new int32_t[length];
-    data2 = new int32_t[length];
-    play = new int32_t[length];
+    data1 = new char[length];
+    data2 = new char[length];
 
     char *indata = new char[BUFSIZE];
     int32_t ctr = 0;
@@ -100,14 +130,8 @@ void read_input(const char *filename)
     {
         ifs.getline(indata, BUFSIZE);
         /** store for later processing */
-        bool entry = map_input(data1, ctr, indata[0]);
-        entry &= map_input(data2, ctr, indata[2]);
-        if (!entry)
-        {
-            std::cerr << "failed to insert, aborting...\n";
-            exit(1);
-        }
-        map_play(play, ctr, indata[0], indata[2]);
+        data1[ctr] = indata[0];
+        data2[ctr] = indata[2];
         ctr++;
     }
     cnt = ctr;
@@ -125,30 +149,24 @@ void write_output(const char *filename, int32_t task1, int32_t task2)
 void process_task()
 {
     /** Do something to process the task in general */
-    std::cout << "cnt: " << cnt << "\n";
-    int32_t total_score = 0;
-    for (int32_t i = 0; i < cnt; i++)
-    {
-        total_score += data2[i]; // score of selection
-
-        if (play[i] > 0)
-            total_score += 6; // you won
-        if (play[i] == 0)
-            total_score += 3; // draw
-        if (play[i] < 0)
-            total_score += 0; // you lost
-    }
-    std::cout << "total score: " << total_score << "\n";
 }
 int32_t process_task1(void)
 {
-    /** Do something to process the task specific to 1 */
-    return 0;
+    int32_t total_score = 0;
+    for (int32_t i = 0; i < cnt; i++)
+    {
+        total_score += map_input(data2[i]) + map_rule1(data1[i], data2[i]);
+    }
+    return total_score;
 }
 int32_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
-    return 0;
+    int32_t total_score = 0;
+    for (int32_t i = 0; i < cnt; i++)
+    {
+        total_score += map_rule2(data1[i], data2[i]);
+    }
+    return total_score;
 }
 int main()
 {
@@ -158,20 +176,19 @@ int main()
     /** use this to run input */
     read_input("input.txt");
 
-    process_task();
+    // process_task();
 
     int32_t task1 = process_task1();
     int32_t task2 = process_task2();
 
     /** store output to file */
-    // write_output("output.txt", task1, task2);
+    write_output("output.txt", task1, task2);
 
     std::cout << "Task 1 result: " << task1 << "\n";
     std::cout << "Task 2 result: " << task2 << "\n";
 
     delete[] data1;
     delete[] data2;
-    delete[] play;
     /** add delete to all data here */
     return 0;
 }
