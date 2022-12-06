@@ -14,7 +14,7 @@ int32_t cnt;
 size_t length;
 /** add additional */
 
-int32_t find_seqeunce(const char *cstr, size_t count, size_t seq_len)
+int32_t find_sequence(const char *cstr, size_t count, size_t seq_len)
 {
     set<char> seq;
     int32_t loc = -1;
@@ -69,11 +69,11 @@ void process_task()
 }
 int32_t process_task1(void)
 {
-    return find_seqeunce(data, length, 4);
+    return find_sequence(data, length, 4);
 }
 int32_t process_task2(void)
 {
-    return find_seqeunce(data, length, 14);
+    return find_sequence(data, length, 14);
 }
 int main()
 {
