@@ -95,6 +95,7 @@ void read_input(const char *filename)
                 {
                     if (1 == sscanf(indata, "$ cd %s", parent))
                     {
+                        items.insert(pair<string, item_t>(trace_string(&trace, parent), {level, 0, false}));
                         trace.push_back(parent);
                         level++;
                     }
@@ -188,10 +189,27 @@ size_t process_task1(void)
     }
     return total_size;
 }
-int32_t process_task2(void)
+size_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
-    return 0;
+    size_t smallest = 0;
+    size_t to_free = items["/"].size - 70000000 + 30000000;
+    size_t *sizes = new size_t[cnt];
+    size_t ctr = 0;
+    for (auto it = items.begin(); it != items.end(); it++)
+    {
+        if (!it->second.isfile)
+        {
+            if (it->second.size >= to_free)
+            {
+                sizes[ctr++] = it->second.size;
+            }
+        }
+    }
+
+    sort(sizes, sizes + ctr);
+    smallest = sizes[0];
+    delete[] sizes;
+    return smallest;
 }
 int main()
 {
@@ -202,12 +220,13 @@ int main()
     read_input("input.txt");
 
     process_task();
+    // print_items();
 
     size_t task1 = process_task1();
     size_t task2 = process_task2();
 
     /** store output to file */
-    // write_output("output.txt", task1, task2);
+    write_output("output.txt", task1, task2);
 
     cout << "Task 1 result: " << task1 << "\n";
     cout << "Task 2 result: " << task2 << "\n";
