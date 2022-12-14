@@ -15,7 +15,7 @@ public:
     typedef struct item_t
     {
         int32_t id;
-        int32_t value;
+        size_t value;
     } item_t;
     enum fn_t
     {
@@ -23,7 +23,6 @@ public:
         MULT,
         SQUARE,
     } fn_sel = fn_t::ADD;
-
     int32_t id = 0;
     int32_t fn_const = 0;
     int32_t m_true = 0;
@@ -31,14 +30,15 @@ public:
     int32_t item_test = 1;
 
 private:
-    int32_t eval_ctr = 0;
-    list<int32_t> items;
-    list<int32_t> start_items;
+    size_t BIG_CONSTANT = 223092870; // prod of each prime up to 23, e.g. 2*3*5*7*...*23
+    size_t eval_ctr = 0;
+    list<size_t> items;
+    list<size_t> start_items;
 
-    int32_t eval_item(int32_t val, bool relief)
+    size_t eval_item(size_t val, bool relief)
     {
         eval_ctr++;
-        int32_t new_val = 0;
+        size_t new_val = 0;
         switch (fn_sel)
         {
         case fn_t::ADD:
@@ -54,13 +54,17 @@ private:
             new_val = val;
             break;
         }
-        new_val = relief ? new_val / 3 : new_val;
+        new_val = relief ? (new_val / 3) : (new_val % BIG_CONSTANT);
         return new_val;
     }
 
 public:
     void ping_start(void) { start_items.assign(items.begin(), items.end()); }
-    void reset_items(void) { items.assign(start_items.begin(), start_items.end()); }
+    void reset_items(void)
+    {
+        eval_ctr = 0;
+        items.assign(start_items.begin(), start_items.end());
+    }
     void clear_values(void) { items.clear(); }
     void print_monkey(void)
     {
@@ -81,8 +85,8 @@ public:
         cout << "    If true: throw to monkey id " << m_true << "\n";
         cout << "    If false: throw to monkey id " << m_false << "\n";
     }
-    int32_t get_inspect(void) { return eval_ctr; }
-    void append_value(int32_t value) { items.push_back(value); }
+    size_t get_inspect(void) { return eval_ctr; }
+    void append_value(size_t value) { items.push_back(value); }
     bool append_item(item_t item)
     {
         if (item.id != id)
@@ -93,7 +97,7 @@ public:
     void eval_items(list<item_t> *throws, bool relief = true)
     {
         assert(throws != NULL);
-        int32_t val;
+        size_t val;
         while (!items.empty())
         {
             val = eval_item(items.front(), relief);
@@ -190,13 +194,34 @@ void read_input(const char *filename)
     delete[] indata;
 }
 
-void write_output(const char *filename, int32_t task1, int32_t task2)
+void write_output(const char *filename, size_t task1, size_t task2)
 {
     ofstream ofs(filename, ofstream::out);
     ofs << "Task 1 result: " << task1 << "\n";
     ofs << "Task 2 result: " << task2 << "\n";
     ofs.close();
 }
+
+void play(size_t rounds, list<size_t> *times, bool relief)
+{
+    list<MONKEY::item_t> *throws = new list<MONKEY::item_t>();
+    for (size_t k = 0; k < rounds; k++)
+    {
+        for (int32_t i = 0; i < cnt; i++)
+        {
+            data[i].eval_items(throws, relief);
+            while (!throws->empty())
+            {
+                data[throws->front().id].append_item(throws->front());
+                throws->pop_front();
+            }
+            if (k == rounds - 1)
+                times->push_back(data[i].get_inspect());
+        }
+    }
+    delete throws;
+}
+
 void process_task()
 {
     // prints the monkey content
@@ -204,37 +229,37 @@ void process_task()
         it->second.print_monkey();
     cout << "\n";
 }
-int32_t process_task1(void)
+
+size_t process_task1(void)
 {
-    int32_t m_business = 1;
-    list<int32_t> times;
-    list<MONKEY::item_t> *throws = new list<MONKEY::item_t>();
-    for (size_t k = 0; k < 20; k++)
-    {
-        for (int32_t i = 0; i < cnt; i++)
-        {
-            data[i].eval_items(throws);
-            while (!throws->empty())
-            {
-                data[throws->front().id].append_item(throws->front());
-                throws->pop_front();
-            }
-            if (k == 19)
-                times.push_back(data[i].get_inspect());
-        }
-    }
+    size_t m_business = 1;
+    list<size_t> times;
+
+    play(20, &times, true);
+
     times.sort();
     m_business *= times.back();
     times.pop_back();
     m_business *= times.back();
-    delete throws;
+
     return m_business;
 }
-int32_t process_task2(void)
+size_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
+    size_t m_business = 1;
+    list<size_t> times;
 
-    return 0;
+    for (auto &it : data)
+        it.second.reset_items();
+
+    play(10000, &times, false);
+
+    times.sort();
+    m_business *= times.back();
+    times.pop_back();
+    m_business *= times.back();
+
+    return m_business;
 }
 int main()
 {
@@ -244,10 +269,10 @@ int main()
     /** use this to run input */
     read_input("input.txt");
 
-    process_task();
+    // process_task();
 
-    int32_t task1 = process_task1();
-    int32_t task2 = process_task2();
+    size_t task1 = process_task1();
+    size_t task2 = process_task2();
 
     /** store output to file */
     write_output("output.txt", task1, task2);
