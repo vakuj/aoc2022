@@ -59,10 +59,25 @@ This path reaches the goal in 31 steps, the fewest possible.
 
 ### Part 2
 
+To maximize exercise while hiking, the trail should start as low as possible: elevation a. The goal is still the square marked E. However, the trail should still be direct, taking the fewest steps to reach its goal. So, you'll need to `find the shortest path from any square at elevation a to the square marked E`.
+
+What is the fewest steps required to move starting from any square with elevation a to the location that should get the best signal?
 
 
 #### Example
 
+Again consider the example from above.
+
+Now, there are six choices for starting position (five marked a, plus the square marked S that counts as being at elevation a). If you start at the bottom-left square, you can reach the goal most quickly:
+
+```
+...v<<<<
+...vv<<^
+...v>E^^
+.>v>>>^^
+>^>>>>>^
+```
+This path reaches the goal in only 29 steps, the fewest possible.
 
 
 ___

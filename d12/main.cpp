@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <list>
-#include <map>
+
 using namespace std;
 #define BUFSIZE 1024
 /** used in processing */
@@ -46,7 +46,6 @@ void read_input(const char *filename)
     length = ifs.tellg();
     ifs.seekg(0, ifstream::beg);
 
-    // data = new vector<vector<char>>();
     vector<char> row;
     char *indata = new char[BUFSIZE];
     int32_t ctr = 0;
@@ -56,6 +55,7 @@ void read_input(const char *filename)
         if (next == '\n')
         {
             /** forward without storing */
+            ifs.getline(indata, BUFSIZE);
         }
         else
         {
@@ -90,6 +90,7 @@ void process_task()
     char c;
     cost_t cst;
     vector<cost_t> row;
+    // find start and stop
     for (int32_t i = 0; i < (int32_t)data.size(); i++)
     {
         for (int32_t j = 0; j < (int32_t)data[0].size(); j++)
@@ -111,6 +112,8 @@ void process_task()
             }
         }
     }
+    // calculate cost of moving up,down,left,rigt from i,j
+    // if outside of bounds: mark with INT32_MAX
     for (int32_t i = 0; i < (int32_t)data.size(); i++)
     {
         for (int32_t j = 0; j < (int32_t)data[0].size(); j++)
@@ -187,29 +190,34 @@ inline loc_t nextMove(loc_t curr, dir_t dir)
     }
     return next;
 }
-vector<vector<int32_t>> *walk(loc_t source, const int32_t MAX_VALUE)
+/**
+ * @brief Dijkstra's algorithm-ish
+ *
+ * @param source starting point
+ * @param MAX_VALUE value used to initialize distances
+ * @return vector<vector<int32_t>>* pointer to 2D-vector containing distance map
+ */
+vector<vector<int32_t>> *walk(loc_t source, const int32_t MAX_VALUE = INT32_MAX)
 {
-    static vector<dir_t> dirs = {dir_t::UP, dir_t::DOWN, dir_t::LEFT, dir_t::RIGHT};
+    static vector<dir_t> dirs = {dir_t::UP, dir_t::DOWN, dir_t::LEFT, dir_t::RIGHT}; // Set of movement diretions
+    vector<vector<int32_t>> *dist = new vector<vector<int32_t>>(data.size());        // map of all distances from source
+    vector<vector<bool>> *added = new vector<vector<bool>>(data.size());             // map of all added nodes
+    list<loc_t> *nodes = new list<loc_t>();                                          // list of nodes destined for processing
 
-    vector<vector<bool>> *added = new vector<vector<bool>>(data.size());
-    vector<vector<int32_t>> *dist = new vector<vector<int32_t>>(data.size());
-    vector<vector<loc_t>> *prev = new vector<vector<loc_t>>(data.size());
-
-    list<loc_t> *nodes = new list<loc_t>();
-
+    // Initialize maps
     for (int32_t x = 0; x < (int32_t)data.size(); x++)
     {
         added->data()[x].resize(data[0].size());
         dist->data()[x].resize(data[0].size());
-        prev->data()[x].resize(data[0].size());
         for (int32_t y = 0; y < (int32_t)data[0].size(); y++)
         {
             added->data()[x][y] = false;
             dist->data()[x][y] = MAX_VALUE;
         }
     }
-    dist->data()[source.row][source.col] = 0;
 
+    // set source to 0 dist, add source to nodes and mark source as set
+    dist->data()[source.row][source.col] = 0;
     nodes->push_back(source);
     added->data()[source.row][source.col] = true;
 
@@ -217,29 +225,30 @@ vector<vector<int32_t>> *walk(loc_t source, const int32_t MAX_VALUE)
     int32_t ndist;
     while (!nodes->empty())
     {
+        // take first node and remove it from nodes
         current = nodes->front();
         nodes->pop_front();
 
-        for (size_t i = 0; i < dirs.size(); i++)
+        for (size_t i = 0; i < dirs.size(); i++) // iterate each neighbour to current node
         {
-            if (isValidMove(current, dirs[i]))
+            if (isValidMove(current, dirs[i])) // is movement to neighbour valid?
             {
                 neighbour = nextMove(current, dirs[i]);
-                if (!isSet(neighbour, added))
+                if (!isSet(neighbour, added)) // is neighbour already added?
                 {
+                    // Nope: add to nodes and mark as set
                     nodes->push_back(neighbour);
                     added->data()[neighbour.row][neighbour.col] = true;
                 }
+                // calculate new distance to neighbour and update neighbours if new distance is less than before?
                 ndist = dist->data()[current.row][current.col] + 1;
                 if (ndist <= dist->data()[neighbour.row][neighbour.col])
                     dist->data()[neighbour.row][neighbour.col] = ndist;
             }
         }
-        // }
     }
     delete added;
     delete nodes;
-    delete prev;
 
     return dist;
 }
@@ -254,8 +263,22 @@ int32_t process_task1(void)
 }
 int32_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
-    return 0;
+    static int32_t MAX_VALUE = (int32_t)(data.size() * data[0].size());
+    list<int32_t> steps;
+    for (int32_t x = 0; x < (int32_t)data.size(); x++)
+    {
+        for (int32_t y = 0; y < (int32_t)data[0].size(); y++)
+        {
+            if (data[x][y] == 'a')
+            {
+                auto dist = walk({x, y}, MAX_VALUE);
+                steps.push_back(dist->data()[stop.row][stop.col]);
+                delete dist;
+            }
+        }
+    }
+    steps.sort();
+    return steps.front();
 }
 int main()
 {
