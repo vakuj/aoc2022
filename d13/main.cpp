@@ -47,16 +47,7 @@ static map<itype_t, char> itype_to_char = {
     {itype_t::DELIMITER, ','},
     {itype_t::NONE_ITEM, '_'},
 };
-/** inverts the order of check, i.e., (lhs < rhs) -> (lhs > rhs). Undefined is still undefined. */
-static map<check_t, check_t> invert_check = {
-    {check_t::UNDEFINED, check_t::UNDEFINED},
-    {check_t::TRUE_INT, check_t::FALSE_INT},
-    {check_t::TRUE_LIST, check_t::FALSE_LIST},
-    {check_t::TRUE_LENGTH, check_t::FALSE_LENGTH},
-    {check_t::FALSE_INT, check_t::TRUE_INT},
-    {check_t::FALSE_LIST, check_t::TRUE_LIST},
-    {check_t::FALSE_LENGTH, check_t::TRUE_LENGTH},
-};
+/** map check_t to string for debugging purposes */
 static map<check_t, string> check_to_string = {
     {check_t::UNDEFINED, "check_t::UNDEFINED"},
     {check_t::TRUE_INT, "check_t::TRUE_INT"},
@@ -293,35 +284,6 @@ check_t item_compare(item_t left, item_t right)
     return check_t::UNDEFINED;
 }
 /**
- * @brief compare list against item, where list and item order is specified by left_to_right.
- * If item is NONE_ITEM: FALSE_LENGTH is returned if left_to_right is true, else TRUE_LENGTH
- *
- * @param items list of items to compare against item
- * @param item item to compare against list of items
- * @param left_to_right set true if list is on lhs, else false for rhs
- * @return check_t the outcome of the comparison, flipped to correct order as specified by left_to_right
- */
-check_t list_to_item_compare(list<item_t> *items, item_t item, bool left_to_right)
-{
-    check_t check = check_t::UNDEFINED;
-    if (item.itype == itype_t::NONE_ITEM)
-    {
-        if (left_to_right)
-            return check_t::FALSE_LENGTH;
-        else
-            return check_t::TRUE_LENGTH;
-    }
-    for (auto it = items->begin(); it != items->end(); it++)
-    {
-        check = item_compare(*it, item);
-        if (check != check_t::UNDEFINED)
-            break;
-    }
-    if (!left_to_right)
-        return invert_check[check];
-    return check;
-}
-/**
  * @brief Compares left list of items to right list of items.
  *        Makes recursive call to itself if sub-list is found.
  *
@@ -331,8 +293,9 @@ check_t list_to_item_compare(list<item_t> *items, item_t item, bool left_to_righ
  */
 check_t list_to_list_compare(list<item_t> *left, list<item_t> *right)
 {
-    print_list(left);
-    print_list(right);
+    /** Uncomment for debug print */
+    // print_list(left);
+    // print_list(right);
     check_t check = check_t::UNDEFINED;
     list<item_t>::iterator lit, rit;
     list<item_t> lproc, rproc;
@@ -344,11 +307,7 @@ check_t list_to_list_compare(list<item_t> *left, list<item_t> *right)
         fetch_next(rit, &rproc);
         if (lproc.size() == 1 && rproc.size() == 1) // each hold a constant
             check = item_compare(lproc.front(), rproc.front());
-        else if (lproc.size() == 1 && rproc.size() > 1)
-            check = list_to_item_compare(&rproc, lproc.front(), false);
-        else if (lproc.size() > 1 && rproc.size() == 1)
-            check = list_to_item_compare(&lproc, rproc.front(), true);
-        else if (lproc.size() > 1 && rproc.size() > 1)
+        else if (lproc.size() >= 1 && rproc.size() >= 1)
             check = list_to_list_compare(&lproc, &rproc);
         // else // empty lproc && rproc -> do nothing
         if (check != check_t::UNDEFINED)
@@ -361,6 +320,7 @@ check_t list_to_list_compare(list<item_t> *left, list<item_t> *right)
         if (lit != left->end() && rit == right->end())
             check = check_t::FALSE_LIST;
     }
+
     return check;
 }
 
@@ -393,7 +353,8 @@ int32_t process_task1(void)
         data->pop_front();
 
         check = list_to_list_compare(&front.lhs, &front.rhs);
-        cout << ctr << ": " << check_to_string[check] << "\n\n";
+        /** Uncomment for debug print */
+        // cout << ctr << ": " << check_to_string[check] << "\n\n";
         if (check > check_t::UNDEFINED && check <= check_t::TRUE_LENGTH)
             sum_of_true += ctr;
         ctr++;
