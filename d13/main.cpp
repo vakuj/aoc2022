@@ -26,13 +26,14 @@ enum itype_t
 /** Comparison pass/fail conditions */
 enum check_t
 {
-    UNDEFINED,    // default, none of the other cases match
-    TRUE_INT,     // lhs < rhs
-    TRUE_LIST,    // lhs[n] < rhs[n]
-    TRUE_LENGTH,  // lhs.length < rhs.length
-    FALSE_INT,    // lhs > rhs
-    FALSE_LIST,   // lhs[n] > rhs[n]
-    FALSE_LENGTH, // lhs.length > rhs.length
+    UNDEFINED,     // default, none of the other cases match
+    TRUE_INT,      // lhs < rhs
+    TRUE_LIST,     // lhs[n] < rhs[n]
+    TRUE_LENGTH,   // lhs.length < rhs.length
+    FALSE_INT,     // lhs > rhs
+    FALSE_LIST,    // lhs[n] > rhs[n]
+    FALSE_LENGTH,  // lhs.length > rhs.length
+    NONE_ITEM_DUO, // indecisive flag, i.e., lhs == rhs == NONE_ITEM
 };
 /** Convert char to itype_t, supports LIST_START, LIST_STOP and DELIMITER */
 static map<char, itype_t> char_to_itype = {
@@ -162,8 +163,9 @@ void read_input(const char *filename)
     ifs.seekg(0, ifstream::beg);
 
     data = new list<packet_t>();
-    list<item_t> lhs;
-    list<item_t> rhs;
+    list<item_t> *lhs = new list<item_t>();
+    list<item_t> *rhs = new list<item_t>();
+    packet_t new_pack;
 
     char *indata = new char[BUFSIZE];
     int32_t ctr = 0;
@@ -179,11 +181,13 @@ void read_input(const char *filename)
         {
             /** store for later processing */
             ifs.getline(indata, BUFSIZE); // LHS
-            parsePacket(indata, ifs.gcount(), &lhs);
+            parsePacket(indata, ifs.gcount(), lhs);
 
             ifs.getline(indata, BUFSIZE); // RHS
-            parsePacket(indata, ifs.gcount(), &rhs);
-            data->push_back({lhs, rhs});
+            parsePacket(indata, ifs.gcount(), rhs);
+            new_pack.lhs.assign(lhs->begin(), lhs->end());
+            new_pack.rhs.assign(rhs->begin(), rhs->end());
+            data->push_back(new_pack);
 
             ctr++;
         }
@@ -191,6 +195,8 @@ void read_input(const char *filename)
     cnt = ctr;
     ifs.close();
     delete[] indata;
+    delete rhs;
+    delete lhs;
 }
 
 void write_output(const char *filename, int32_t task1, int32_t task2)
@@ -213,7 +219,7 @@ void print_list(list<item_t> *items)
 }
 void process_task()
 {
-    /** Do something to process the task in general */
+    /** prints data packets */
     for (auto it = data->begin(); it != data->end(); it++)
     {
         print_list(&(it->lhs));
@@ -277,6 +283,8 @@ check_t item_compare(item_t left, item_t right)
             return check_t::FALSE_INT;
         return check_t::UNDEFINED;
     }
+    if (left.itype == itype_t::NONE_ITEM && right.itype == itype_t::NONE_ITEM)
+        return check_t::NONE_ITEM_DUO;
     if (left.itype == itype_t::CONSTANT && right.itype == itype_t::NONE_ITEM)
         return check_t::FALSE_LENGTH;
     if (left.itype == itype_t::NONE_ITEM && right.itype == itype_t::CONSTANT)
@@ -298,18 +306,28 @@ check_t list_to_list_compare(list<item_t> *left, list<item_t> *right)
     // print_list(right);
     check_t check = check_t::UNDEFINED;
     list<item_t>::iterator lit, rit;
-    list<item_t> lproc, rproc;
+    list<item_t> *lproc = new list<item_t>();
+    list<item_t> *rproc = new list<item_t>();
     lit = left->begin();
     rit = right->begin();
     while (lit != left->end() && rit != right->end())
     {
-        fetch_next(lit, &lproc);
-        fetch_next(rit, &rproc);
-        if (lproc.size() == 1 && rproc.size() == 1) // each hold a constant
-            check = item_compare(lproc.front(), rproc.front());
-        else if (lproc.size() >= 1 && rproc.size() >= 1)
-            check = list_to_list_compare(&lproc, &rproc);
+        fetch_next(lit, lproc);
+        fetch_next(rit, rproc);
+        if (lproc->size() == 1 && rproc->size() == 1) // each hold a constant
+            check = item_compare(lproc->front(), rproc->front());
+        else if (lproc->size() >= 1 && rproc->size() >= 1)
+            check = list_to_list_compare(lproc, rproc);
         // else // empty lproc && rproc -> do nothing
+        if (check == check_t::NONE_ITEM_DUO)
+        {
+            if (left->size() == 1 && right->size() > 1)
+                check = check_t::TRUE_LIST;
+            else if (left->size() > 1 && right->size() == 1)
+                check = check_t::FALSE_LIST;
+            else
+                check = check_t::UNDEFINED;
+        }
         if (check != check_t::UNDEFINED)
             break;
     }
@@ -320,51 +338,82 @@ check_t list_to_list_compare(list<item_t> *left, list<item_t> *right)
         if (lit != left->end() && rit == right->end())
             check = check_t::FALSE_LIST;
     }
-
+    delete lproc;
+    delete rproc;
     return check;
 }
-
+/**
+ * @brief simple list compare suitable for sort algorithm of list<list<item_t>> type
+ *
+ * @param left left hand side of comparison
+ * @param right right hand side of comparison
+ * @return true if left is before right, else false if right should be before left
+ */
+bool list_compare(list<item_t> &left, list<item_t> &right)
+{
+    check_t check = list_to_list_compare(&left, &right);
+    return !(check_t::FALSE_INT <= check && check <= check_t::FALSE_LENGTH);
+}
 int32_t process_task1(void)
 {
-    /**
-     * If both values are `integers`, the `lower integer should come first`.
-     *  - If the `left integer < right integer`, the inputs are `in the right order`.
-     *  - If the `left integer > right integer`, the inputs are `not in the right order`.
-     *  - If `left integer == right integer`; continue checking the next part of the input.
-     *
-     * If both values are `lists`, compare the `first value of each list`, then `the second value`, and `so on`.
-     *  - If the `left list runs out of items first`, the inputs are in the `right order`.
-     *  - If the `right list runs out of items first`, the inputs are `not in the right order`.
-     *  - If the `lists are the same length` and `no comparison makes a decision` about the order, continue checking the `next part of the input`.
-     *
-     * If exactly one value is an integer, convert the integer to a list which contains that integer as its only value, then retry the comparison.
-     *  - For example, if comparing `[0,0,0]` and `2`, convert the right value to `[2]`; the result is then found by instead comparing `[0,0,0]` and `[2]`.
-     */
     check_t check = check_t::UNDEFINED;
-    packet_t front;
-    list<item_t> lproc, rproc;
-    list<item_t>::iterator lit, rit;
     int32_t ctr = 1;
     int32_t sum_of_true = 0;
-    while (!data->empty())
+    list<packet_t>::iterator it = data->begin();
+    while (it != data->end())
     {
         check = check_t::UNDEFINED;
-        front = data->front();
-        data->pop_front();
 
-        check = list_to_list_compare(&front.lhs, &front.rhs);
+        check = list_to_list_compare(&(it->lhs), &(it->rhs));
         /** Uncomment for debug print */
-        // cout << ctr << ": " << check_to_string[check] << "\n\n";
+        // cout << ctr << ": " << check_to_string[check] << "\n";
         if (check > check_t::UNDEFINED && check <= check_t::TRUE_LENGTH)
             sum_of_true += ctr;
         ctr++;
+        it++;
     }
     return sum_of_true;
 }
 int32_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
-    return 0;
+    // construct the two divider packets
+    const char *div1_str = "[[2]]";
+    const char *div2_str = "[[6]]";
+    list<item_t> *div1 = new list<item_t>();
+    list<item_t> *div2 = new list<item_t>();
+    parsePacket(div1_str, 6, div1);
+    parsePacket(div2_str, 6, div2);
+    // organize all data to a list of lists of items.
+    list<list<item_t>> all_packets;
+    for (auto it = data->begin(); it != data->end(); it++)
+    {
+        all_packets.push_back(it->rhs);
+        all_packets.push_back(it->lhs);
+    }
+    // don't forget the divider packets
+    all_packets.push_front(*div1);
+    all_packets.push_back(*div2);
+    // do some sorting
+    all_packets.sort(list_compare);
+    int32_t offset_div1 = 0;
+    int32_t offset_div2 = 0;
+    int32_t ctr = 1;
+    // find offsets of divider packets
+    for (auto it : all_packets)
+    {
+        // compare algorithm causes UNDEFINED if lists are exact match
+        if (offset_div1 == 0)
+            offset_div1 = (list_to_list_compare(&it, div1) == check_t::UNDEFINED) ? ctr : offset_div1;
+        if (offset_div2 == 0)
+            offset_div2 = (list_to_list_compare(&it, div2) == check_t::UNDEFINED) ? ctr : offset_div2;
+        ctr++;
+        if (offset_div1 > 0 && offset_div2 > 0)
+            break;
+    }
+    // clean up and return the offsets multiplied with each other.
+    delete div1;
+    delete div2;
+    return offset_div1 * offset_div2;
 }
 int main()
 {
@@ -372,7 +421,7 @@ int main()
     // read_input("test.txt");
 
     /** use this to run input */
-    read_input("input.txt"); // 4990 is too low
+    read_input("input.txt");
 
     // process_task();
 
