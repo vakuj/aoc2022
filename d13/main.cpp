@@ -230,11 +230,21 @@ void process_task()
         cout << "\n";
     }
 }
+/**
+ * @brief Fetches the next items from the list iterator and inserts the item into dst.
+ * Content of dst may differ depending on what first item is:
+ * (a) Item is CONSTANT a signular item is inserted. Same for NONE_ITEM item type.
+ * (b) Item is LIST_START a sequence of items are insterted until LIST_START and LIST_STOP reach balance (excludes first LIST_START and last LIST_STOP).
+ * (c) Item is LIST_STOP or DELIMITER advances it but no insertion to dst.
+ *
+ * @param it iterator reference. is advanced for each item parsed
+ * @param dst reference to insertion destination (push_back). is cleared before each before parsing.
+ */
 void fetch_next(list<item_t>::iterator &it, list<item_t> *dst)
 {
     assert(dst != NULL);
     dst->clear();
-    if (it->itype == itype_t::CONSTANT)
+    if (it->itype == itype_t::CONSTANT || it->itype == itype_t::NONE_ITEM)
     {
         dst->push_back(*it);
         it++;
@@ -255,16 +265,17 @@ void fetch_next(list<item_t>::iterator &it, list<item_t> *dst)
         }
         dst->pop_back();
     }
-    else if (it->itype == itype_t::LIST_STOP)
-    {
+    else if (it->itype == itype_t::LIST_STOP || it->itype == itype_t::DELIMITER)
         it++;
-    }
-    else if (it->itype == itype_t::DELIMITER)
-    {
-        it++;
-    }
 }
-
+/**
+ * @brief Compares left item to right item.
+ * Only compares CONSTANT-to-CONSTANT, CONSTANT-to-NONE_ITEM and NONE_ITEM-to-CONSTANT.
+ *
+ * @param left item to compare to right
+ * @param right item to compare to left
+ * @return check_t outcome of comparison
+ */
 check_t item_compare(item_t left, item_t right)
 {
     if (left.itype == itype_t::CONSTANT && right.itype == itype_t::CONSTANT)
@@ -282,8 +293,8 @@ check_t item_compare(item_t left, item_t right)
     return check_t::UNDEFINED;
 }
 /**
- * @brief compare list against item, where list and item order is specified by
- *        left_to_right
+ * @brief compare list against item, where list and item order is specified by left_to_right.
+ * If item is NONE_ITEM: FALSE_LENGTH is returned if left_to_right is true, else TRUE_LENGTH
  *
  * @param items list of items to compare against item
  * @param item item to compare against list of items
@@ -293,6 +304,13 @@ check_t item_compare(item_t left, item_t right)
 check_t list_to_item_compare(list<item_t> *items, item_t item, bool left_to_right)
 {
     check_t check = check_t::UNDEFINED;
+    if (item.itype == itype_t::NONE_ITEM)
+    {
+        if (left_to_right)
+            return check_t::FALSE_LENGTH;
+        else
+            return check_t::TRUE_LENGTH;
+    }
     for (auto it = items->begin(); it != items->end(); it++)
     {
         check = item_compare(*it, item);
@@ -303,26 +321,45 @@ check_t list_to_item_compare(list<item_t> *items, item_t item, bool left_to_righ
         return invert_check[check];
     return check;
 }
+/**
+ * @brief Compares left list of items to right list of items.
+ *        Makes recursive call to itself if sub-list is found.
+ *
+ * @param left list of items
+ * @param right list of items
+ * @return check_t outcome of the comparison
+ */
 check_t list_to_list_compare(list<item_t> *left, list<item_t> *right)
 {
+    print_list(left);
+    print_list(right);
     check_t check = check_t::UNDEFINED;
     list<item_t>::iterator lit, rit;
+    list<item_t> lproc, rproc;
     lit = left->begin();
     rit = right->begin();
     while (lit != left->end() && rit != right->end())
     {
-        check = item_compare(*lit, *rit);
-        lit++;
-        rit++;
+        fetch_next(lit, &lproc);
+        fetch_next(rit, &rproc);
+        if (lproc.size() == 1 && rproc.size() == 1) // each hold a constant
+            check = item_compare(lproc.front(), rproc.front());
+        else if (lproc.size() == 1 && rproc.size() > 1)
+            check = list_to_item_compare(&rproc, lproc.front(), false);
+        else if (lproc.size() > 1 && rproc.size() == 1)
+            check = list_to_item_compare(&lproc, rproc.front(), true);
+        else if (lproc.size() > 1 && rproc.size() > 1)
+            check = list_to_list_compare(&lproc, &rproc);
+        // else // empty lproc && rproc -> do nothing
         if (check != check_t::UNDEFINED)
             break;
     }
     if (check == check_t::UNDEFINED)
     {
         if (lit == left->end() && rit != right->end())
-            check = check_t::TRUE_LENGTH;
+            check = check_t::TRUE_LIST;
         if (lit != left->end() && rit == right->end())
-            check = check_t::FALSE_LENGTH;
+            check = check_t::FALSE_LIST;
     }
     return check;
 }
@@ -355,40 +392,8 @@ int32_t process_task1(void)
         front = data->front();
         data->pop_front();
 
-        // remove starting marker
-        lit = front.lhs.begin();
-        rit = front.rhs.begin();
-        lit++;
-        rit++;
-
-        while (lit != front.lhs.end() && rit != front.rhs.end())
-        {
-            fetch_next(lit, &lproc);
-            fetch_next(rit, &rproc);
-            // print_list(&lproc);
-
-            if (lproc.size() == 1 && rproc.size() == 1) // each hold a constant
-                check = item_compare(lproc.front(), rproc.front());
-            else if (lproc.size() == 1 && rproc.size() > 1)
-                check = list_to_item_compare(&rproc, lproc.front(), false);
-            else if (lproc.size() > 1 && rproc.size() == 1)
-                check = list_to_item_compare(&lproc, rproc.front(), true);
-            else if (lproc.size() > 1 && rproc.size() > 1)
-                check = list_to_list_compare(&lproc, &rproc);
-            // else // empty
-            if (check != check_t::UNDEFINED)
-                break;
-        }
-        if (check == check_t::UNDEFINED)
-        {
-            if (lit == front.lhs.end() && rit != front.rhs.end())
-                check = check_t::TRUE_LENGTH;
-            if (lit != front.lhs.end() && rit == front.rhs.end())
-                check = check_t::FALSE_LENGTH;
-        }
-        print_list(&front.lhs);
-        print_list(&front.rhs);
-        cout << check_to_string[check] << "\n\n";
+        check = list_to_list_compare(&front.lhs, &front.rhs);
+        cout << ctr << ": " << check_to_string[check] << "\n\n";
         if (check > check_t::UNDEFINED && check <= check_t::TRUE_LENGTH)
             sum_of_true += ctr;
         ctr++;
@@ -403,10 +408,10 @@ int32_t process_task2(void)
 int main()
 {
     /** use this for testing examples */
-    read_input("test.txt");
+    // read_input("test.txt");
 
     /** use this to run input */
-    // read_input("input.txt");
+    read_input("input.txt"); // 4990 is too low
 
     // process_task();
 
