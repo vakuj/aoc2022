@@ -1,0 +1,2 @@
+Task 1 result: 5688618
+Task 2 result: 12625383204261
