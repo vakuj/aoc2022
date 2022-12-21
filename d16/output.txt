@@ -1,2 +1,2 @@
-Task 1 result: 1701
-Task 2 result: 0
+Task 1 result: 1651
+Task 2 result: 1701
