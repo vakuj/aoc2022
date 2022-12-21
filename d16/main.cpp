@@ -174,34 +174,41 @@ int32_t find_time_id(id_t start_id, id_t search_id, int32_t time_remaining)
     }
     return max_time;
 }
-int32_t chain_score(id_t current, set<id_t> none_open, map<id_t, map<id_t, int32_t>> jump_count, int32_t ctr)
+int32_t chain_score(id_t current, set<id_t> none_open, map<id_t, bool> visited, map<id_t, map<id_t, int32_t>> jump_count, int32_t ctr)
 {
     if (ctr <= 0)
         return 0;
     if (none_open.empty())
         return estimate_valve_score(current, ctr);
     int32_t max_score = 0;
-    int32_t current_score;
+    int32_t current_score = 0;
+    ;
 
     bool erased = false;
-    if (none_open.count(current) != 0)
+    // if (none_open.count(current) != 0)
+    if (!visited[current])
     {
-        none_open.erase(current);
+        visited[current] = true;
+        // none_open.erase(current);
         erased = true;
     }
     for (auto it : none_open)
     {
-        auto jc = jump_count[current][it];
-        current_score = estimate_valve_score(current, ctr - 1);
-        current_score += chain_score(it, none_open, jump_count, ctr - jc);
+        if (!visited[it])
+        {
+            auto jc = jump_count[current][it];
+            current_score = estimate_valve_score(current, ctr - 1);
+            current_score += chain_score(it, none_open, visited, jump_count, ctr - jc);
+        }
         if (current_score > max_score)
             max_score = current_score;
     }
     if (erased)
-        none_open.insert(current);
+        visited[current] = false;
+    // none_open.insert(current);
     return max_score;
 }
-id_t open_next(id_t current, set<id_t> none_open, map<id_t, map<id_t, int32_t>> jump_count, int32_t ctr)
+id_t open_next(id_t current, set<id_t> none_open, map<id_t, bool> visited, map<id_t, map<id_t, int32_t>> jump_count, int32_t ctr)
 {
     if (none_open.empty())
         return current;
@@ -213,16 +220,17 @@ id_t open_next(id_t current, set<id_t> none_open, map<id_t, map<id_t, int32_t>> 
     for (auto it : none_open)
     {
         auto jc = jump_count[current][it];
-        current_score = chain_score(it, none_open, jump_count, ctr - jc);
+        current_score = chain_score(it, none_open, visited, jump_count, ctr - jc);
         if (current_score >= max_score)
         {
             max_score = current_score;
             next_id = it;
         }
+        print_id(current);
+        cout << " -> ";
+        print_id(it);
+        cout << " : " << current_score << "\n";
     }
-    // print_id(current);
-    // cout << " -> ";
-    // print_id(next_id);
     // cout << " of [";
     // for (auto it : none_open)
     // {
@@ -252,14 +260,34 @@ int32_t process_task1(void)
     valve_t valve = data->at(chars_to_id("AA"));
     set<id_t> open_valves;
     set<id_t> valves_to_open;
+    set<id_t> all_valves;
     map<id_t, map<id_t, int32_t>> jump_count;
+    map<id_t, bool> visited;
+    list<id_t> *path_list = new list<id_t>();
 
     int32_t ctr = 30;
     int32_t accumulated_pressure = 0;
     for (auto it : *data)
     {
         if (it.second.rate != 0)
+        {
+            visited[it.first] = false;
             valves_to_open.insert(it.first);
+        }
+        all_valves.insert(it.first);
+    }
+    for (auto ait : all_valves)
+        for (auto it : valves_to_open)
+            jump_count[ait][it] = 0;
+    for (auto it : *data)
+    {
+        if (valves_to_open.count(it.first) != 0)
+            for (auto cit : it.second.connections)
+                jump_count[cit][it.first] = 2;
+
+        for (auto cit : it.second.connections)
+            if (valves_to_open.count(cit) != 0)
+                jump_count[it.first][cit] = 2;
     }
     cout << "Jump list: \n";
     for (auto it : valves_to_open)
@@ -269,7 +297,13 @@ int32_t process_task1(void)
             if (it == sit.first)
                 jump_count[sit.first][it] = 0;
             else
-                jump_count[sit.first][it] = 15 - find_time_id(it, sit.first, 15);
+            {
+                if (jump_count[sit.first][it] == 0)
+                {
+                    auto time = 10 - find_time_id(it, sit.first, 10);
+                    jump_count[sit.first][it] = time;
+                }
+            }
 
             print_id(sit.first);
             cout << " -> ";
@@ -277,9 +311,10 @@ int32_t process_task1(void)
             cout << " with " << jump_count[sit.first][it] << "\n";
         }
     }
-
-    id_t next_id = open_next(valve.id, valves_to_open, jump_count, ctr);
+    delete path_list;
+    id_t next_id = open_next(valve.id, valves_to_open, visited, jump_count, 10);
     valves_to_open.erase(next_id);
+    visited[next_id] = true;
     while (ctr > 0)
     {
         auto dp = pressure_increase(&open_valves);
@@ -288,8 +323,9 @@ int32_t process_task1(void)
         if (valve.id == next_id)
         {
             open_valves.insert(next_id);
-            next_id = open_next(next_id, valves_to_open, jump_count, ctr);
+            next_id = open_next(valve.id, valves_to_open, visited, jump_count, 10);
             valves_to_open.erase(next_id);
+            visited[next_id] = true;
         }
         else
             path_next(&valve, next_id);
@@ -298,7 +334,6 @@ int32_t process_task1(void)
     }
     cout << "\n";
     print_id_set(open_valves, "Open valves");
-    // print_id_set(damaged_valves, "Damaged valves");
     return accumulated_pressure;
 }
 int32_t process_task2(void)
@@ -309,10 +344,10 @@ int32_t process_task2(void)
 int main()
 {
     /** use this for testing examples */
-    read_input("test.txt");
+    // read_input("test.txt");
 
     /** use this to run input */
-    // read_input("input.txt");
+    read_input("input.txt");
 
     process_task();
 
