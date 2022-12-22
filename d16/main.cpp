@@ -130,7 +130,9 @@ void process_task()
     for (auto it : *data)
     {
         print_id(it.second.id);
-        cout << " with rate = " << it.second.rate << " -> [";
+        cout << " with rate = ";
+        cout.width(3);
+        cout << it.second.rate << " -> [";
         for (auto cit : it.second.connections)
         {
             print_id(cit);
@@ -258,12 +260,16 @@ void path_next(valve_t *current, id_t next)
     }
     *current = data->at(child);
 }
-void construct_jump_list(set<id_t> valves_to_open, int32_t look_ahead = 10)
+void construct_jump_table(set<id_t> valves_to_open, int32_t look_ahead = 10)
 {
-    cout << "Building Jump table\n";
-    for (auto ait : *data)
-        for (auto it : valves_to_open)
+    cout << ">> Building Jump table\n";
+    cout << "[";
+    for (auto it : valves_to_open)
+    {
+        for (auto ait : *data)
             jump_table[ait.second.id][it] = 0;
+        cout << "=";
+    }
     for (auto it : *data)
     {
         if (valves_to_open.count(it.first) != 0)
@@ -293,8 +299,10 @@ void construct_jump_list(set<id_t> valves_to_open, int32_t look_ahead = 10)
             // print_id(it);
             // cout << " with " << jump_table[sit.first][it] << "\n";
         }
+        cout << "=";
     }
-    cout << "Jump table done\n";
+    cout << "]\n";
+    cout << ">> Jump table done\n\n";
 }
 int32_t process_task1(void)
 {
@@ -316,21 +324,36 @@ int32_t process_task1(void)
             valves_to_open.insert(it.first);
         }
     }
-    construct_jump_list(valves_to_open);
+    construct_jump_table(valves_to_open);
 
     id_t next_id = open_next(valve.id, valves_to_open, visited, look_ahead);
     while (ctr > 0)
     {
         auto dp = pressure_increase(&open_valves);
-        cout << ctr << ": " << dp << "\n";
+        cout.width(3);
+        cout << 30 - ctr << ": ";
+        cout.width(3);
+        cout << dp << " | ";
         accumulated_pressure += dp;
         if (valve.id == next_id)
         {
+            cout << "At ";
+            print_id(next_id);
+            cout << " opening ";
+            print_id(next_id);
+            cout << "\n";
             open_valves.insert(next_id);
             next_id = open_next(valve.id, valves_to_open, visited, look_ahead);
         }
         else
+        {
+            cout << "At ";
+            print_id(valve.id);
+            cout << " towards ";
+            print_id(next_id);
+            cout << "\n";
             path_next(&valve, next_id);
+        }
 
         ctr--;
     }
@@ -338,14 +361,9 @@ int32_t process_task1(void)
     cout << "\n====\n";
     return accumulated_pressure;
 }
-bool isOnSamePath(id_t target, id_t other_target, set<id_t> &none_open, map<id_t, bool> &visited, int32_t look_ahead)
+inline int32_t distance_between(id_t id0, id_t id1)
 {
-    if (none_open.size() == 0)
-        return false;
-    none_open.insert(target);
-    visited[target] = false;
-    id_t other_next = open_next(other_target, none_open, visited, look_ahead);
-    return (target == other_next);
+    return jump_table[id0][id1];
 }
 int32_t process_task2(void)
 {
@@ -369,7 +387,10 @@ int32_t process_task2(void)
         }
     }
 
-    // plan ahead approach?
+    /** Plan ahead approach:
+     * 1. Let each one pick two consecutive destinations
+     * 2. Iterate through remaining adding one for each.
+     */
     list<id_t> elephant_list;
     list<id_t> self_list;
     id_t next_id_elephant = open_next(valve_elephant.id, valves_to_open, visited, look_ahead);
@@ -385,22 +406,78 @@ int32_t process_task2(void)
     {
         next_id_elephant = open_next(elephant_list.back(), valves_to_open, visited, look_ahead);
         elephant_list.push_back(next_id_elephant);
-        next_id_self = open_next(self_list.back(), valves_to_open, visited, look_ahead);
-        self_list.push_back(next_id_self);
+        if (!valves_to_open.empty())
+        {
+            next_id_self = open_next(self_list.back(), valves_to_open, visited, look_ahead);
+            self_list.push_back(next_id_self);
+        }
     }
-    cout << "ELE list: ";
-    for (auto it : elephant_list)
+    cout << "Before swapping\nElephants list(distance): ";
+    int32_t total_dist = 0;
+
+    auto it = elephant_list.begin();
+    while (it != elephant_list.end())
     {
-        print_id(it);
-        cout << ", ";
+        print_id(*it);
+        cout << "(" << total_dist << "), ";
+        total_dist += distance_between(*it, *(it++));
     }
-    cout << "\nYOU list: ";
-    for (auto it : self_list)
+    cout << "\n     your list(distance): ";
+    total_dist = 0;
+    it = self_list.begin();
+    while (it != self_list.end())
     {
-        print_id(it);
-        cout << ", ";
+        print_id(*it);
+        cout << "(" << total_dist << "), ";
+        total_dist += distance_between(*it, *(it++));
     }
-    cout << "\n";
+    cout << "\n\n";
+
+    /**
+     * Since the elephant got to pick first
+     * you can choose to swap some valves
+     * with the elephant in the from the
+     * from the movement plan, given that
+     * you have shorter distance to that
+     * valve. Firt valve is not cannot
+     * be changed.
+     */
+    auto eit = elephant_list.begin();
+    auto sit = self_list.begin();
+    next_id_elephant = *eit;
+    next_id_self = *sit;
+    eit++;
+    sit++;
+    while (eit != elephant_list.end() && sit != self_list.end())
+    {
+        if (distance_between(next_id_self, *eit) < distance_between(next_id_self, *sit))
+        {
+            iter_swap(sit, eit);
+        }
+        next_id_elephant = *eit;
+        next_id_self = *sit;
+        sit++;
+        eit++;
+    }
+    cout << "After swapping\nElephants list(distance): ";
+    total_dist = 0;
+    it = elephant_list.begin();
+    while (it != elephant_list.end())
+    {
+        print_id(*it);
+        cout << "(" << total_dist << "), ";
+        total_dist += distance_between(*it, *(it++));
+    }
+    cout << "\n     your list(distance): ";
+    total_dist = 0;
+    it = self_list.begin();
+    while (it != self_list.end())
+    {
+        print_id(*it);
+        cout << "(" << total_dist << "), ";
+        total_dist += distance_between(*it, *(it++));
+    }
+    cout << "\n\n";
 
     next_id_self = self_list.front();
     self_list.pop_front();
@@ -440,7 +517,7 @@ int32_t process_task2(void)
         if (valve_elephant.id == next_id_elephant)
         {
 
-            cout << "ELE at ";
+            cout << "Elephant at ";
             print_id(next_id_elephant);
             cout << " opening ";
             print_id(next_id_elephant);
@@ -455,7 +532,7 @@ int32_t process_task2(void)
         }
         else
         {
-            cout << "ELE at ";
+            cout << "Elephant at ";
             print_id(valve_elephant.id);
             cout << " towards ";
             print_id(next_id_elephant);
