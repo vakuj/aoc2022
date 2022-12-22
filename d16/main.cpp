@@ -21,6 +21,7 @@ typedef struct valve_t
     list<id_t> connections; // valve id numbers to connected valves
 } valve_t;
 map<id_t, valve_t> *data;
+map<id_t, map<id_t, int32_t>> jump_table;
 int32_t cnt;
 size_t length;
 /** add additional */
@@ -174,7 +175,7 @@ int32_t find_time_id(id_t start_id, id_t search_id, int32_t time_remaining)
     }
     return max_time;
 }
-int32_t chain_score(id_t current, set<id_t> none_open, map<id_t, bool> visited, map<id_t, map<id_t, int32_t>> jump_count, int32_t ctr)
+int32_t chain_score(id_t current, set<id_t> none_open, map<id_t, bool> visited, int32_t ctr)
 {
     if (ctr <= 0)
         return 0;
@@ -196,9 +197,9 @@ int32_t chain_score(id_t current, set<id_t> none_open, map<id_t, bool> visited, 
     {
         if (!visited[it])
         {
-            auto jc = jump_count[current][it];
+            auto jc = jump_table[current][it];
             current_score = estimate_valve_score(current, ctr - 1);
-            current_score += chain_score(it, none_open, visited, jump_count, ctr - jc);
+            current_score += chain_score(it, none_open, visited, ctr - jc);
         }
         if (current_score > max_score)
             max_score = current_score;
@@ -208,7 +209,7 @@ int32_t chain_score(id_t current, set<id_t> none_open, map<id_t, bool> visited, 
     // none_open.insert(current);
     return max_score;
 }
-id_t open_next(id_t current, set<id_t> &none_open, map<id_t, bool> &visited, map<id_t, map<id_t, int32_t>> jump_count, int32_t ctr)
+id_t open_next(id_t current, set<id_t> &none_open, map<id_t, bool> &visited, int32_t ctr)
 {
     if (none_open.empty())
         return current;
@@ -219,17 +220,17 @@ id_t open_next(id_t current, set<id_t> &none_open, map<id_t, bool> &visited, map
     id_t next_id = current;
     for (auto it : none_open)
     {
-        auto jc = jump_count[current][it];
-        current_score = chain_score(it, none_open, visited, jump_count, ctr - jc);
+        auto jc = jump_table[current][it];
+        current_score = chain_score(it, none_open, visited, ctr - jc);
         if (current_score >= max_score)
         {
             max_score = current_score;
             next_id = it;
         }
-        print_id(current);
-        cout << " -> ";
-        print_id(it);
-        cout << " : " << current_score << "\n";
+        // print_id(current);
+        // cout << " -> ";
+        // print_id(it);
+        // cout << " : " << current_score << "\n";
     }
     none_open.erase(next_id);
     visited[next_id] = true;
@@ -257,43 +258,43 @@ void path_next(valve_t *current, id_t next)
     }
     *current = data->at(child);
 }
-void construct_jump_list(map<id_t, map<id_t, int32_t>> &jump_count, set<id_t> valves_to_open, int32_t look_ahead = 10)
+void construct_jump_list(set<id_t> valves_to_open, int32_t look_ahead = 10)
 {
-    cout << "Building Jump List\n";
+    cout << "Building Jump table\n";
     for (auto ait : *data)
         for (auto it : valves_to_open)
-            jump_count[ait.second.id][it] = 0;
-    // for (auto it : *data)
-    // {
-    //     if (valves_to_open.count(it.first) != 0)
-    //         for (auto cit : it.second.connections)
-    //             jump_count[cit][it.first] = 2;
+            jump_table[ait.second.id][it] = 0;
+    for (auto it : *data)
+    {
+        if (valves_to_open.count(it.first) != 0)
+            for (auto cit : it.second.connections)
+                jump_table[cit][it.first] = 2;
 
-    //     for (auto cit : it.second.connections)
-    //         if (valves_to_open.count(cit) != 0)
-    //             jump_count[it.first][cit] = 2;
-    // }
+        for (auto cit : it.second.connections)
+            if (valves_to_open.count(cit) != 0)
+                jump_table[it.first][cit] = 2;
+    }
     for (auto it : valves_to_open)
     {
         for (auto sit : *data)
         {
             if (it == sit.first)
-                jump_count[sit.first][it] = 0;
+                jump_table[sit.first][it] = 0;
             else
             {
-                if (jump_count[sit.first][it] == 0)
+                if (jump_table[sit.first][it] == 0)
                 {
                     auto time = look_ahead - find_time_id(it, sit.first, look_ahead);
-                    jump_count[sit.first][it] = time;
+                    jump_table[sit.first][it] = time;
                 }
             }
             // print_id(sit.first);
             // cout << " -> ";
             // print_id(it);
-            // cout << " with " << jump_count[sit.first][it] << "\n";
+            // cout << " with " << jump_table[sit.first][it] << "\n";
         }
     }
-    cout << "Jump list done\n";
+    cout << "Jump table done\n";
 }
 int32_t process_task1(void)
 {
@@ -306,7 +307,6 @@ int32_t process_task1(void)
     set<id_t> valves_to_open;
 
     map<id_t, bool> visited;
-    map<id_t, map<id_t, int32_t>> jump_count;
 
     for (auto it : *data)
     {
@@ -316,9 +316,9 @@ int32_t process_task1(void)
             valves_to_open.insert(it.first);
         }
     }
-    construct_jump_list(jump_count, valves_to_open);
+    construct_jump_list(valves_to_open);
 
-    id_t next_id = open_next(valve.id, valves_to_open, visited, jump_count, look_ahead);
+    id_t next_id = open_next(valve.id, valves_to_open, visited, look_ahead);
     while (ctr > 0)
     {
         auto dp = pressure_increase(&open_valves);
@@ -327,16 +327,25 @@ int32_t process_task1(void)
         if (valve.id == next_id)
         {
             open_valves.insert(next_id);
-            next_id = open_next(valve.id, valves_to_open, visited, jump_count, look_ahead);
+            next_id = open_next(valve.id, valves_to_open, visited, look_ahead);
         }
         else
             path_next(&valve, next_id);
 
         ctr--;
     }
-    cout << "\n";
     print_id_set(open_valves, "Open valves");
+    cout << "\n====\n";
     return accumulated_pressure;
+}
+bool isOnSamePath(id_t target, id_t other_target, set<id_t> &none_open, map<id_t, bool> &visited, int32_t look_ahead)
+{
+    if (none_open.size() == 0)
+        return false;
+    none_open.insert(target);
+    visited[target] = false;
+    id_t other_next = open_next(other_target, none_open, visited, look_ahead);
+    return (target == other_next);
 }
 int32_t process_task2(void)
 {
@@ -350,7 +359,6 @@ int32_t process_task2(void)
     set<id_t> valves_to_open;
 
     map<id_t, bool> visited;
-    map<id_t, map<id_t, int32_t>> jump_count;
 
     for (auto it : *data)
     {
@@ -360,58 +368,114 @@ int32_t process_task2(void)
             valves_to_open.insert(it.first);
         }
     }
-    construct_jump_list(jump_count, valves_to_open);
 
-    id_t next_id_elephant = open_next(valve_elephant.id, valves_to_open, visited, jump_count, look_ahead);
-    id_t next_id_self = open_next(valve_self.id, valves_to_open, visited, jump_count, look_ahead);
+    // plan ahead approach?
+    list<id_t> elephant_list;
+    list<id_t> self_list;
+    id_t next_id_elephant = open_next(valve_elephant.id, valves_to_open, visited, look_ahead);
+    elephant_list.push_back(next_id_elephant);
+    next_id_elephant = open_next(elephant_list.back(), valves_to_open, visited, look_ahead);
+    elephant_list.push_back(next_id_elephant);
+    id_t next_id_self = open_next(valve_self.id, valves_to_open, visited, look_ahead);
+    self_list.push_back(next_id_self);
+    next_id_self = open_next(self_list.back(), valves_to_open, visited, look_ahead);
+    self_list.push_back(next_id_self);
+
+    while (!valves_to_open.empty())
+    {
+        next_id_elephant = open_next(elephant_list.back(), valves_to_open, visited, look_ahead);
+        elephant_list.push_back(next_id_elephant);
+        next_id_self = open_next(self_list.back(), valves_to_open, visited, look_ahead);
+        self_list.push_back(next_id_self);
+    }
+    cout << "ELE list: ";
+    for (auto it : elephant_list)
+    {
+        print_id(it);
+        cout << ", ";
+    }
+    cout << "\nYOU list: ";
+    for (auto it : self_list)
+    {
+        print_id(it);
+        cout << ", ";
+    }
+    cout << "\n";
+
+    next_id_self = self_list.front();
+    self_list.pop_front();
+    next_id_elephant = elephant_list.front();
+    elephant_list.pop_front();
     while (ctr > 0)
     {
         auto dp = pressure_increase(&open_valves);
-        cout << ctr << ": " << dp << "\n";
+        cout.width(3);
+        cout << 26 - ctr << ": ";
+        cout.width(3);
+        cout << dp << " | ";
         accumulated_pressure += dp;
         if (valve_self.id == next_id_self)
         {
-            cout << "You open: ";
+            cout << "You at ";
             print_id(next_id_self);
-            cout << "\n";
+            cout << " opening ";
+            print_id(next_id_self);
+            cout << " | ";
             open_valves.insert(next_id_self);
-            next_id_self = open_next(valve_self.id, valves_to_open, visited, jump_count, look_ahead);
+            if (!self_list.empty())
+            {
+                next_id_self = self_list.front();
+                self_list.pop_front();
+            }
         }
         else
         {
-            path_next(&valve_self, next_id_self);
-            cout << "You path to: ";
+            cout << "You at ";
             print_id(valve_self.id);
-            cout << "\n";
+            cout << " towards ";
+            print_id(next_id_self);
+            cout << " | ";
+            path_next(&valve_self, next_id_self);
         }
         if (valve_elephant.id == next_id_elephant)
         {
-            cout << "Elephant opens: ";
+
+            cout << "ELE at ";
+            print_id(next_id_elephant);
+            cout << " opening ";
             print_id(next_id_elephant);
             cout << "\n";
             open_valves.insert(next_id_elephant);
-            next_id_elephant = open_next(valve_elephant.id, valves_to_open, visited, jump_count, look_ahead);
+            // next_id_elephant = open_next(valve_elephant.id, valves_to_open, visited, look_ahead);
+            if (!elephant_list.empty())
+            {
+                next_id_elephant = elephant_list.front();
+                elephant_list.pop_front();
+            }
         }
         else
         {
-            path_next(&valve_elephant, next_id_elephant);
-            cout << "Elephant paths to: ";
+            cout << "ELE at ";
             print_id(valve_elephant.id);
+            cout << " towards ";
+            print_id(next_id_elephant);
             cout << "\n";
+            path_next(&valve_elephant, next_id_elephant);
         }
         ctr--;
     }
     cout << "\n";
     print_id_set(open_valves, "Open valves");
+    print_id_set(valves_to_open, "None opened");
     return accumulated_pressure;
 }
 int main()
 {
     /** use this for testing examples */
-    read_input("test.txt");
+    // read_input("test.txt");
 
     /** use this to run input */
-    // read_input("input.txt");
+    read_input("input.txt");
 
     process_task();
 
