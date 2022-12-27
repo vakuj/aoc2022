@@ -2,14 +2,16 @@
 #include <fstream>
 #include <algorithm>
 #include <vector>
+#include <array>
 #include <map>
 #include <list>
 
 using namespace std;
 
 #define BUFSIZE 1024
-
-#define cave_t vector<vector<bool>>
+#define WIDTH 8
+#define HEIGHT 4096
+#define cave_t array<array<bool, HEIGHT>, WIDTH>
 typedef struct coord_t
 {
     int32_t x;
@@ -132,7 +134,7 @@ public:
         if (npos.x < 0)
             return true;
         // blocked by right wall?
-        if (npos.x + grid_size[rock].x > 7)
+        if (npos.x + grid_size[rock].x > WIDTH - 1)
             return true;
         // blocked by other frozen rock?
         for (auto it : shape_map[rock])
@@ -257,7 +259,7 @@ void read_input(const char *filename)
     // delete[] indata;
 }
 
-void write_output(const char *filename, int32_t task1, int32_t task2)
+void write_output(const char *filename, size_t task1, size_t task2)
 {
     ofstream ofs(filename, ofstream::out);
     ofs << "Task 1 result: " << task1 << "\n";
@@ -268,14 +270,48 @@ void process_task()
 {
     /** Do something to process the task in general */
 }
-int32_t process_task1(void)
+int32_t clear_floor(cave_t *cave, size_t highest_point)
+{
+    size_t count = 0;
+    int32_t offset = 0;
+    for (size_t y = highest_point; y > 0; y -= 2)
+    {
+        if (cave->at(0)[y])
+        {
+            count = 1;
+            for (size_t x = 1; x < WIDTH; x++)
+                count += cave->at(x)[y] ? 1 : 0; //(cave->at(x)[y - 1] ? 1 : 0);
+        }
+        if (count >= WIDTH - 2)
+        {
+            offset = (int32_t)(y - 1);
+            break;
+        }
+    }
+    if (offset > 0)
+    {
+        // cout << offset << ", " << is_prime(offset) << endl;
+        array<bool, HEIGHT> *tmp = new array<bool, HEIGHT>();
+        for (size_t i = 0; i < WIDTH; i++)
+        {
+            tmp->fill(false);
+            copy(cave->at(i).begin() + offset, cave->at(i).end(), tmp->begin());
+            copy(tmp->begin(), tmp->end(), cave->at(i).begin());
+        }
+        delete tmp;
+    }
+
+    return offset;
+}
+
+size_t process_task1(void)
 {
     /** init cave with a floor */
     size_t rcnt = 2023;
-    cave_t *cave = new cave_t(8);
+    cave_t *cave = new cave_t();
     for (int32_t x = 0; x < 7; x++)
     {
-        cave->at(x).resize(rcnt * 4, false);
+        cave->at(x).fill(false);
         cave->at(x)[0] = true;
     }
     coord_t nextSpawn = {2, 4};
@@ -305,11 +341,13 @@ int32_t process_task1(void)
             highest_point = current_rock.getHighest() < highest_point ? highest_point : current_rock.getHighest();
             // update spawn position
             nextSpawn.x = 2;
-            nextSpawn.y = highest_point + 4;
+            nextSpawn.y = (int32_t)highest_point + 4;
+
             // update rock type
             rock_shape = (rock_t)((int32_t)rock_shape + 1);
             if (rock_shape == rock_t::NONE)
                 rock_shape = rock_t::HLINE;
+
             // store rock
             rocks.push_back(ROCK(rock_shape, nextSpawn));
             // pick current rock
@@ -319,11 +357,11 @@ int32_t process_task1(void)
         }
         ctr %= cnt;
     }
-    // for (int32_t y = highest_point; y >= 0; y--)
+    // for (size_t y = highest_point; y > 0; y--)
     // {
     //     for (int32_t x = 0; x < 7; x++)
     //     {
-    //         if (cave->at(x)[y])
+    //         if (cave->at(x)[y - 1])
     //             cout << "#";
     //         else
     //             cout << ".";
@@ -334,10 +372,82 @@ int32_t process_task1(void)
     delete cave;
     return highest_point;
 }
-int32_t process_task2(void)
+size_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
-    return 0;
+    /** init cave with a floor */
+    // size_t rock_count = 1000000000000;
+
+#define ROCKBIG 1000000000000
+#define ROCKMAX 2022
+
+    size_t rock_count = ROCKMAX;
+    cave_t *cave = new cave_t();
+    for (int32_t x = 0; x < 7; x++)
+    {
+        cave->at(x).fill(false);
+        cave->at(x)[0] = true;
+    }
+    coord_t nextSpawn = {2, 4};
+    rock_t rock_shape = rock_t::HLINE;
+
+    ROCK current_rock = ROCK(rock_shape, nextSpawn);
+    bool next_down = false;
+    int32_t ctr = 0;
+    size_t highest_point = 0;
+    size_t floor_offset = 0;
+    size_t prev_floor = 0;
+    size_t prev_rock = rock_count;
+    while (rock_count > 0)
+    {
+        if (next_down)
+        {
+            current_rock.move_rock(dir_t::DOWN, cave);
+            next_down = false;
+        }
+        else
+        {
+            current_rock.move_rock(data->at(ctr++), cave);
+            ctr %= cnt;
+            next_down = true;
+        }
+        if (current_rock.isFrozen())
+        {
+            // update highest point, keep old if current rock fell below
+            if (highest_point > HEIGHT - 100)
+            {
+                auto current_floor_offset = clear_floor(cave, highest_point);
+                highest_point -= current_floor_offset;
+
+                // auto current_highest = (size_t)(current_rock.getHighest() - current_floor_offset);
+
+                floor_offset += current_floor_offset;
+
+                // cout << ctr << ": " << ROCKMAX - rock_count << " : " << highest_point + floor_offset << " --> ";
+                // cout << prev_rock - rock_count << " : " << (highest_point + floor_offset - prev_floor) << endl;
+                // prev_rock = rock_count;
+                // prev_floor = highest_point + floor_offset;
+            }
+            else
+                highest_point = (size_t)(current_rock.getHighest()) < highest_point ? highest_point : (size_t)(current_rock.getHighest());
+
+            // update spawn position
+            nextSpawn.x = 2;
+            nextSpawn.y = (int32_t)highest_point + 4;
+
+            // update rock type
+            rock_shape = (rock_t)((int32_t)rock_shape + 1);
+            if (rock_shape == rock_t::NONE)
+                rock_shape = rock_t::HLINE;
+            // update current rock
+            current_rock = ROCK(rock_shape, nextSpawn);
+            rock_count--;
+            // next movement is not down
+            next_down = false;
+        }
+    }
+
+    delete cave;
+    return highest_point + floor_offset;
 }
 int main()
 {
@@ -349,8 +459,8 @@ int main()
 
     process_task();
 
-    int32_t task1 = process_task1();
-    int32_t task2 = process_task2();
+    size_t task1 = process_task1();
+    size_t task2 = process_task2();
 
     /** store output to file */
     write_output("output.txt", task1, task2);
