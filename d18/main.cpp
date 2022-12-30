@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <array>
+#include <list>
 
 using namespace std;
 #define BUFSIZE 1024
@@ -27,6 +28,10 @@ typedef struct coord_t
      * @return coord_t
      */
     coord_t operator-(coord_t &b) { return {this->x - b.x, this->y - b.y, this->z - b.z}; }
+    coord_t operator/(int32_t c) { return {this->x / c, this->y / c, this->z / c}; }
+    coord_t operator*(int32_t c) { return {this->x * c, this->y * c, this->z * c}; }
+    bool operator==(coord_t &b) { return (this->x == b.x && this->y == b.y && this->z == b.z); }
+    bool operator!=(coord_t &b) { return !(this->operator==(b)); }
     /**
      * @brief print content of a as "a.x, a.y, a.z" to os. appends endl.
      *
@@ -34,7 +39,8 @@ typedef struct coord_t
      * @param a to be printed to os
      * @return ostream& os
      */
-    friend ostream &operator<<(ostream &os, const coord_t &a)
+    friend ostream &
+    operator<<(ostream &os, const coord_t &a)
     {
         os << a.x << ", " << a.y << ", " << a.z << endl;
         return os;
@@ -45,8 +51,9 @@ static coord_t normY = {0, 1, 0}; // normal to y-plane
 static coord_t normZ = {0, 0, 1}; // normal to z-plane
 struct GRID
 {
+    using x_t = array<bool, GRIDSIZE>;
+    using xy_t = array<array<bool, GRIDSIZE>, GRIDSIZE>;
     using xyz_t = array<array<array<bool, GRIDSIZE>, GRIDSIZE>, GRIDSIZE>;
-    using yz_t = array<array<bool, GRIDSIZE>, GRIDSIZE>;
 
 private:
     xyz_t *xyz; // xyz grid to mark lava
@@ -59,45 +66,53 @@ public:
      *
      * @param a location to set true
      */
-    void set(coord_t a) { (*xyz)[a.x][a.y][a.z] = true; }
+    void set(coord_t a) { (*xyz)[a.z][a.y][a.x] = true; }
     /**
      * @brief reset (false) in xyz grid for location a
      *
      * @param a location to reset
      */
-    void reset(coord_t a) { (*xyz)[a.x][a.y][a.z] = false; }
+    void reset(coord_t a) { (*xyz)[a.z][a.y][a.x] = false; }
     /**
      * @brief flips state in location a (true -> false, false -> true)
      *
      * @param a location to flip
      */
-    void flip(coord_t a) { (*xyz)[a.x][a.y][a.z] = !(*xyz)[a.x][a.y][a.z]; }
+    void flip(coord_t a) { (*xyz)[a.z][a.y][a.x] = !(*xyz)[a.z][a.y][a.x]; }
     /**
      * @brief retrieves data at location a in xyz grid
      *
      * @param a location to retrieve
      * @return true location is set, else not set.
      */
-    bool operator[](coord_t a) { return (*xyz)[a.x][a.y][a.z]; }
+    bool operator[](coord_t a) { return (*xyz)[a.z][a.y][a.x]; }
     /**
      * @brief Get the yz grid at location x
      *
      * @param x location to get yz grid.
      * @return yz_t retrieved yz grid.
      */
-    yz_t get_yz(const size_t x) { return (*xyz)[x]; }
+    xy_t get_xy(const size_t z) { return (*xyz)[z]; }
+    x_t get_x(const size_t y, const size_t z) { return (*xyz)[z][y]; }
     /**
      * @brief checks if any are yz grid at location x of xyz grid.
      *
      * @param x location to check in xyz grid
      * @return true at least 1 element is set, else no elements are set
      */
-    bool any_at_x(const size_t x)
+    bool any_at_z(const size_t z)
     {
-        for (auto col : this->get_yz(x))
+        for (auto col : this->get_xy(z))
             for (auto el : col)
                 if (el)
                     return true;
+        return false;
+    }
+    bool any_at_yz(const size_t y, const size_t z)
+    {
+        for (auto el : this->get_x(y, z))
+            if (el)
+                return true;
         return false;
     }
     /**
@@ -109,12 +124,12 @@ public:
      */
     friend ostream &operator<<(ostream &os, GRID &g)
     {
-        for (size_t x = 0; x < GRIDSIZE; x++)
+        for (size_t z = 0; z < GRIDSIZE; z++)
         {
-            if (g.any_at_x(x))
+            if (g.any_at_z(z))
             {
-                os << "At x = " << x << endl;
-                for (auto col : g.get_yz(x))
+                os << "At z = " << z << endl;
+                for (auto col : g.get_xy(z))
                 {
                     for (auto el : col)
                         os << (el ? "X" : ".");
@@ -221,10 +236,71 @@ int32_t process_task1(void)
 {
     return count_free_neighbours();
 }
+void grow_outward(coord_t c)
+{
+    if (!(*grid)[c])
+    {
+        grid->set(c);
+        grow_outward(c - normX);
+        grow_outward(c + normX);
+        grow_outward(c - normY);
+        grow_outward(c + normY);
+        grow_outward(c - normZ);
+        grow_outward(c + normZ);
+    }
+}
+bool look_outward(coord_t c, coord_t norm)
+{
+    if (norm == normX || norm * -1 == normX)
+        if (c.x <= 1 || c.x >= GRIDSIZE - 1)
+            return false;
+    if (norm == normY || norm * -1 == normY)
+        if (c.y <= 1 || c.y >= GRIDSIZE - 1)
+            return false;
+    if (norm == normZ || norm * -1 == normZ)
+        if (c.z <= 1 || c.z >= GRIDSIZE - 1)
+            return false;
+    if (!(*grid)[c])
+        return look_outward(c + norm, norm);
+    return true;
+}
+inline bool isTrapped(coord_t c)
+{
+    if ((*grid)[c])
+        return false;
+    return look_outward(c, normX) && look_outward(c, normX * -1) &&
+           look_outward(c, normY) && look_outward(c, normY * -1) &&
+           look_outward(c, normZ) && look_outward(c, normZ * -1);
+}
 int32_t process_task2(void)
 {
     /** Do something to process the task specific to 2 */
-    return 0;
+    coord_t center = {0, 0, 0};
+    for (auto it : *data)
+        center = center + it;
+    center = center / (int32_t)data->size();
+    cout << "center: " << center;
+    // current problem is that pockets of size two or more
+    // if (isTrapped(center))
+    //     cout << "center is trapped: " << center;
+
+    grow_outward(center);
+
+    for (int32_t z = 1; z < GRIDSIZE - 1; z++)
+    {
+        for (int32_t y = 1; y < GRIDSIZE - 1; y++)
+        {
+            for (int32_t x = 1; x < GRIDSIZE - 1; x++)
+            {
+                if (isTrapped({x, y, z}))
+                    grid->set({x, y, z});
+            }
+        }
+        /* code */
+    }
+
+    cout << *grid;
+    return count_free_neighbours();
 }
 int main()
 {
@@ -233,6 +309,7 @@ int main()
 
     /** use this to run input */
     read_input("input.txt");
+    // task 2: 2830, 2925 too high. 2160 too low. 2548, 2490 ??
 
     process_task();
 
