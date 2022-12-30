@@ -10,37 +10,88 @@ using namespace std;
 /** used in processing */
 typedef struct coord_t
 {
-    int32_t x;
-    int32_t y;
-    int32_t z;
+    int32_t x; // x-coordinate
+    int32_t y; // y-coordinate
+    int32_t z; // z-coordinate
+    /**
+     * @brief elementwise add b to this, no bounds checking
+     *
+     * @param b to be added to this
+     * @return coord_t
+     */
     coord_t operator+(coord_t &b) { return {this->x + b.x, this->y + b.y, this->z + b.z}; }
-    // coord_t operator*(int32_t c) { return {c * this->x, c * this->y, c * this->z}; }
+    /**
+     * @brief elementwise subtraction of this and b
+     *
+     * @param b to be subtracted from this
+     * @return coord_t
+     */
     coord_t operator-(coord_t &b) { return {this->x - b.x, this->y - b.y, this->z - b.z}; }
+    /**
+     * @brief print content of a as "a.x, a.y, a.z" to os. appends endl.
+     *
+     * @param os ostream to use for printing
+     * @param a to be printed to os
+     * @return ostream& os
+     */
     friend ostream &operator<<(ostream &os, const coord_t &a)
     {
         os << a.x << ", " << a.y << ", " << a.z << endl;
         return os;
     }
 } coord_t;
-static coord_t normX = {1, 0, 0};
-static coord_t normY = {0, 1, 0};
-static coord_t normZ = {0, 0, 1};
+static coord_t normX = {1, 0, 0}; // normal to x-plane
+static coord_t normY = {0, 1, 0}; // normal to y-plane
+static coord_t normZ = {0, 0, 1}; // normal to z-plane
 struct GRID
 {
     using xyz_t = array<array<array<bool, GRIDSIZE>, GRIDSIZE>, GRIDSIZE>;
     using yz_t = array<array<bool, GRIDSIZE>, GRIDSIZE>;
 
 private:
-    xyz_t *xyz;
+    xyz_t *xyz; // xyz grid to mark lava
 
 public:
     GRID() { xyz = new xyz_t(); }
     ~GRID() { delete xyz; }
+    /**
+     * @brief set true in xyz grid at location a
+     *
+     * @param a location to set true
+     */
     void set(coord_t a) { (*xyz)[a.x][a.y][a.z] = true; }
+    /**
+     * @brief reset (false) in xyz grid for location a
+     *
+     * @param a location to reset
+     */
     void reset(coord_t a) { (*xyz)[a.x][a.y][a.z] = false; }
+    /**
+     * @brief flips state in location a (true -> false, false -> true)
+     *
+     * @param a location to flip
+     */
     void flip(coord_t a) { (*xyz)[a.x][a.y][a.z] = !(*xyz)[a.x][a.y][a.z]; }
+    /**
+     * @brief retrieves data at location a in xyz grid
+     *
+     * @param a location to retrieve
+     * @return true location is set, else not set.
+     */
     bool operator[](coord_t a) { return (*xyz)[a.x][a.y][a.z]; }
+    /**
+     * @brief Get the yz grid at location x
+     *
+     * @param x location to get yz grid.
+     * @return yz_t retrieved yz grid.
+     */
     yz_t get_yz(const size_t x) { return (*xyz)[x]; }
+    /**
+     * @brief checks if any are yz grid at location x of xyz grid.
+     *
+     * @param x location to check in xyz grid
+     * @return true at least 1 element is set, else no elements are set
+     */
     bool any_at_x(const size_t x)
     {
         for (auto col : this->get_yz(x))
@@ -49,6 +100,13 @@ public:
                     return true;
         return false;
     }
+    /**
+     * @brief prints each non-empty yz grid of xyz grid. appends endl.
+     *
+     * @param os ostream to print to
+     * @param g GRID to print
+     * @return ostream& returns os
+     */
     friend ostream &operator<<(ostream &os, GRID &g)
     {
         for (size_t x = 0; x < GRIDSIZE; x++)
