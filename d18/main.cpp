@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <array>
-#include <list>
+#include <map>
 
 using namespace std;
 #define BUFSIZE 1024
@@ -28,10 +28,34 @@ typedef struct coord_t
      * @return coord_t
      */
     coord_t operator-(coord_t &b) { return {this->x - b.x, this->y - b.y, this->z - b.z}; }
+    /**
+     * @brief elementwise division by constant
+     *
+     * @param c constant to divide with
+     * @return coord_t result
+     */
     coord_t operator/(int32_t c) { return {this->x / c, this->y / c, this->z / c}; }
+    /**
+     * @brief elementwise multiplication by constant
+     *
+     * @param c constant
+     * @return coord_t result
+     */
     coord_t operator*(int32_t c) { return {this->x * c, this->y * c, this->z * c}; }
+    /**
+     * @brief elementwise comparison.
+     *
+     * @param b to be compared with
+     * @return true if all are equal, else false
+     */
     bool operator==(coord_t &b) { return (this->x == b.x && this->y == b.y && this->z == b.z); }
-    bool operator!=(coord_t &b) { return !(this->operator==(b)); }
+    /**
+     * @brief elementwise inverse comparison
+     *
+     * @param b to be compared with
+     * @return true if non are equal, else false
+     */
+    bool operator!=(coord_t &b) { return (this->x != b.x && this->y != b.y && this->z != b.z); }
     /**
      * @brief print content of a as "a.x, a.y, a.z" to os. appends endl.
      *
@@ -39,8 +63,7 @@ typedef struct coord_t
      * @param a to be printed to os
      * @return ostream& os
      */
-    friend ostream &
-    operator<<(ostream &os, const coord_t &a)
+    friend ostream &operator<<(ostream &os, const coord_t &a)
     {
         os << a.x << ", " << a.y << ", " << a.z << endl;
         return os;
@@ -51,48 +74,83 @@ static coord_t normY = {0, 1, 0}; // normal to y-plane
 static coord_t normZ = {0, 0, 1}; // normal to z-plane
 struct GRID
 {
-    using x_t = array<bool, GRIDSIZE>;
-    using xy_t = array<array<bool, GRIDSIZE>, GRIDSIZE>;
-    using xyz_t = array<array<array<bool, GRIDSIZE>, GRIDSIZE>, GRIDSIZE>;
+public:
+    enum id_t
+    {
+        UNDEF,  // undefined
+        LAVA,   // lava element
+        CLOSED, // air enclosed in lava
+        OPEN,   // exposed to open air
+    };
+    using x_t = array<id_t, GRIDSIZE>;
+    using xy_t = array<array<id_t, GRIDSIZE>, GRIDSIZE>;
+    using xyz_t = array<array<array<id_t, GRIDSIZE>, GRIDSIZE>, GRIDSIZE>;
 
 private:
     xyz_t *xyz; // xyz grid to mark lava
+    /**
+     * @brief char equivalent of id.
+     * UNDEF = ., LAVA = X, OPEN =  , CLOSED = #. @ is returned if outside of bound.
+     *
+     * @param id to convert to char
+     * @return char equivalent of id
+     */
+    static char id_to_char(id_t id)
+    {
+        if (id_t::UNDEF == id)
+            return '.';
+        if (id_t::LAVA == id)
+            return 'X';
+        if (id_t::OPEN == id)
+            return ' ';
+        if (id_t::CLOSED == id)
+            return '#';
+        return '@';
+    }
 
 public:
     GRID() { xyz = new xyz_t(); }
     ~GRID() { delete xyz; }
     /**
-     * @brief set true in xyz grid at location a
+     * @brief set LAVA in xyz grid at location a
      *
      * @param a location to set true
      */
-    void set(coord_t a) { (*xyz)[a.z][a.y][a.x] = true; }
+    void set(coord_t a) { (*xyz)[a.z][a.y][a.x] = id_t::LAVA; }
     /**
-     * @brief reset (false) in xyz grid for location a
+     * @brief set coordinate a in xyz grid to id
+     *
+     * @param a coordinate to set
+     * @param id it to set it to
+     */
+    void set(coord_t a, id_t id) { (*xyz)[a.z][a.y][a.x] = id; }
+    /**
+     * @brief reset (UNDEF) in xyz grid for location a
      *
      * @param a location to reset
      */
-    void reset(coord_t a) { (*xyz)[a.z][a.y][a.x] = false; }
-    /**
-     * @brief flips state in location a (true -> false, false -> true)
-     *
-     * @param a location to flip
-     */
-    void flip(coord_t a) { (*xyz)[a.z][a.y][a.x] = !(*xyz)[a.z][a.y][a.x]; }
+    void reset(coord_t a) { (*xyz)[a.z][a.y][a.x] = id_t::UNDEF; }
     /**
      * @brief retrieves data at location a in xyz grid
      *
      * @param a location to retrieve
      * @return true location is set, else not set.
      */
-    bool operator[](coord_t a) { return (*xyz)[a.z][a.y][a.x]; }
+    id_t operator[](coord_t a) { return (*xyz)[a.z][a.y][a.x]; }
     /**
-     * @brief Get the yz grid at location x
+     * @brief Get the xy grid at location z
      *
-     * @param x location to get yz grid.
-     * @return yz_t retrieved yz grid.
+     * @param z location to get xy grid.
+     * @return xy_t retrieved xy grid.
      */
     xy_t get_xy(const size_t z) { return (*xyz)[z]; }
+    /**
+     * @brief Get the x grid at location y,z.
+     *
+     * @param y coordinate
+     * @param z coordinate
+     * @return x_t grid data a y,z
+     */
     x_t get_x(const size_t y, const size_t z) { return (*xyz)[z][y]; }
     /**
      * @brief checks if any are yz grid at location x of xyz grid.
@@ -104,16 +162,25 @@ public:
     {
         for (auto col : this->get_xy(z))
             for (auto el : col)
-                if (el)
+                if (el == id_t::LAVA)
                     return true;
         return false;
     }
-    bool any_at_yz(const size_t y, const size_t z)
+    /**
+     * @brief returns true if c is inside of bounds of xyz data
+     *
+     * @param c coordinate to check
+     * @return true coordinate is inside bounds, else false
+     */
+    bool isInside(coord_t c)
     {
-        for (auto el : this->get_x(y, z))
-            if (el)
-                return true;
-        return false;
+        if (c.x < 0 || c.x > GRIDSIZE - 1)
+            return false;
+        if (c.y < 0 || c.y > GRIDSIZE - 1)
+            return false;
+        if (c.z < 0 || c.z > GRIDSIZE - 1)
+            return false;
+        return true;
     }
     /**
      * @brief prints each non-empty yz grid of xyz grid. appends endl.
@@ -132,7 +199,7 @@ public:
                 for (auto col : g.get_xy(z))
                 {
                     for (auto el : col)
-                        os << (el ? "X" : ".");
+                        os << id_to_char(el);
                     os << endl;
                 }
                 os << endl;
@@ -215,7 +282,9 @@ void process_task()
  */
 inline int32_t try_add_to_count(coord_t src)
 {
-    return !(*grid)[src] ? 1 : 0;
+    if ((*grid)[src] == GRID::id_t::UNDEF || (*grid)[src] == GRID::id_t::OPEN)
+        return 1;
+    return 0;
 }
 int32_t count_free_neighbours(void)
 {
@@ -236,68 +305,71 @@ int32_t process_task1(void)
 {
     return count_free_neighbours();
 }
-void grow_outward(coord_t c)
+/**
+ * @brief Set all bounding neighbours of c to id if c is currently undefined.
+ * Recursively calls along normal, splitting of to its two orthogonal directions,
+ * anti-parallels included. Does not go along negative of norm.
+ *
+ * @param c coordinate to set
+ * @param norm normal to follow
+ * @param id the value to set
+ */
+void set_to_id(coord_t c, coord_t norm, GRID::id_t id)
 {
-    if (!(*grid)[c])
+    if (!grid->isInside(c)) // coordinate c outside of bounds -> return directly
+        return;
+    if ((*grid)[c] == GRID::id_t::UNDEF) // element is undefined
     {
-        grid->set(c);
-        grow_outward(c - normX);
-        grow_outward(c + normX);
-        grow_outward(c - normY);
-        grow_outward(c + normY);
-        grow_outward(c - normZ);
-        grow_outward(c + normZ);
+        grid->set(c, id); // set current to id
+        if (norm == normX || norm * -1 == normX)
+        {
+            // go along x-direction, and split to y and z
+            set_to_id(c + norm, norm, id);
+
+            set_to_id(c + normY, normY, id);
+            set_to_id(c - normY, normY * -1, id);
+
+            set_to_id(c + normZ, normZ, id);
+            set_to_id(c - normZ, normZ * -1, id);
+        }
+        if (norm == normY || norm * -1 == normY)
+        {
+            // go along y-direction, and split to x and z
+            set_to_id(c + normX, normX, id);
+            set_to_id(c - normX, normX * -1, id);
+
+            set_to_id(c + norm, norm, id);
+
+            set_to_id(c + normZ, normZ, id);
+            set_to_id(c - normZ, normZ * -1, id);
+        }
+        if (norm == normZ || norm * -1 == normZ)
+        {
+            // go along z-direction, and split to x and y
+            set_to_id(c + normX, normX, id);
+            set_to_id(c - normX, normX * -1, id);
+
+            set_to_id(c + normY, normY, id);
+            set_to_id(c - normY, normY * -1, id);
+
+            set_to_id(c + norm, norm, id);
+        }
     }
-}
-bool look_outward(coord_t c, coord_t norm)
-{
-    if (norm == normX || norm * -1 == normX)
-        if (c.x <= 1 || c.x >= GRIDSIZE - 1)
-            return false;
-    if (norm == normY || norm * -1 == normY)
-        if (c.y <= 1 || c.y >= GRIDSIZE - 1)
-            return false;
-    if (norm == normZ || norm * -1 == normZ)
-        if (c.z <= 1 || c.z >= GRIDSIZE - 1)
-            return false;
-    if (!(*grid)[c])
-        return look_outward(c + norm, norm);
-    return true;
-}
-inline bool isTrapped(coord_t c)
-{
-    if ((*grid)[c])
-        return false;
-    return look_outward(c, normX) && look_outward(c, normX * -1) &&
-           look_outward(c, normY) && look_outward(c, normY * -1) &&
-           look_outward(c, normZ) && look_outward(c, normZ * -1);
+    return;
 }
 int32_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
-    coord_t center = {0, 0, 0};
-    for (auto it : *data)
-        center = center + it;
-    center = center / (int32_t)data->size();
-    cout << "center: " << center;
-    // current problem is that pockets of size two or more
-    // if (isTrapped(center))
-    //     cout << "center is trapped: " << center;
+    // set all outside elements to open starting from corner
+    coord_t corner = {0, 0, 0};
+    grid->set(corner, GRID::id_t::OPEN);
+    set_to_id(corner + normX, normX, GRID::id_t::OPEN);
 
-    grow_outward(center);
-
-    for (int32_t z = 1; z < GRIDSIZE - 1; z++)
-    {
-        for (int32_t y = 1; y < GRIDSIZE - 1; y++)
-        {
-            for (int32_t x = 1; x < GRIDSIZE - 1; x++)
-            {
-                if (isTrapped({x, y, z}))
-                    grid->set({x, y, z});
-            }
-        }
-        /* code */
-    }
+    // set any remaining undefined elements as closed
+    for (int32_t x = 0; x < GRIDSIZE; x++)
+        for (int32_t y = 0; y < GRIDSIZE; y++)
+            for (int32_t z = 0; z < GRIDSIZE; z++)
+                if ((*grid)[{x, y, z}] == GRID::id_t::UNDEF)
+                    grid->set({x, y, z}, GRID::id_t::CLOSED);
 
     cout << *grid;
     return count_free_neighbours();
@@ -309,7 +381,6 @@ int main()
 
     /** use this to run input */
     read_input("input.txt");
-    // task 2: 2830, 2925 too high. 2160 too low. 2548, 2490 ??
 
     process_task();
 
