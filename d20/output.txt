@@ -1,0 +1,2 @@
+Task 1 result: 13522
+Task 2 result: 0
