@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <vector>
 #include <list>
-#include <set>
 #include <cassert>
 
 using namespace std;
@@ -188,10 +187,7 @@ int32_t process_task2(void)
     /** Do something to process the task specific to 2 */
     list<item_t> *items = new list<item_t>();
     items->assign(data->begin(), data->end());
-    // decrypt(items);a
-    set<int32_t> uset;
-    for (auto it : *items)
-        uset.insert(it.value);
+    // decrypt(items);
     cout << uset.size() << ", " << items->size() << endl;
 
     delete items;
