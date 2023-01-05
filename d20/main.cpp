@@ -69,6 +69,11 @@ void write_output(const char *filename, int64_t task1, int64_t task2)
     ofs << "Task 2 result: " << task2 << "\n";
     ofs.close();
 }
+/**
+ * @brief prints values from list of items
+ *
+ * @param items ptr to list of items
+ */
 void print_list(list<item_t> *items)
 {
     for (auto it : *items)
@@ -78,33 +83,47 @@ void print_list(list<item_t> *items)
     }
     cout << endl;
 }
+/**
+ * @brief Re-evaluates the from + index to bounds within list
+ *
+ * @param from original positon
+ * @param index index increment
+ * @return int64_t truncated index
+ */
 inline int64_t truncate_index(int64_t from, int64_t index)
 {
-    index %= cnt;
-    cout.width(3);
-    cout << index << ", ";
     index += from;
-    if (index >= cnt)
-        return (index + 1) % cnt;
-    if (index <= -cnt)
-        return (index - 2) % cnt;
-    if (index <= 0)
-        return (index - 1) % cnt;
+    index %= (cnt - 1);
+    if (index == 0)
+        index = -1;
+    else if (index < 0)
+        index--;
     return index;
 }
+/**
+ * @brief moves item to from old to new position in list of items. original item should
+ * by caller.
+ *
+ * @param items ptr to list of items
+ * @param item the item to insert
+ * @param from original position
+ */
 void move_item(list<item_t> *items, item_t item, int64_t from)
 {
     int64_t index = truncate_index(from, item.value);
-    cout.width(12);
-    cout << item.value << ", ";
-    cout.width(5);
-    cout << from << ", ";
-    cout.width(5);
-    cout << index << endl;
     auto it = items->begin();
     advance(it, index);
     items->insert(it, item);
 }
+/**
+ * @brief finds item with id in list of items. touched is incremented. if item value is 0, the
+ * item is not removed. is removed for non-zero item values.
+ *
+ * @param id id to find
+ * @param items ptr to list of items
+ * @param item the found item
+ * @return int32_t index where found
+ */
 int32_t find_next_id(int32_t id, list<item_t> *items, item_t *item)
 {
     auto it = items->begin();
@@ -124,6 +143,14 @@ int32_t find_next_id(int32_t id, list<item_t> *items, item_t *item)
     }
     return -1;
 }
+/**
+ * @brief finds the next item in list of items which has not been touched. if next item
+ * has value zero, the item is only touched, and not removed.
+ *
+ * @param items ptr to list of items
+ * @param item the next item with touched incremented, and removed from list
+ * @return int32_t index where found.
+ */
 int32_t find_next(list<item_t> *items, item_t *item)
 {
     auto it = items->begin();
@@ -145,6 +172,12 @@ int32_t find_next(list<item_t> *items, item_t *item)
     }
     return -1;
 }
+/**
+ * @brief finds the index of first item with value 0 in list of items
+ *
+ * @param items ptr to list to items
+ * @return int32_t index of item with value zero
+ */
 int32_t find_zero(list<item_t> *items)
 {
     list<item_t>::iterator it;
@@ -156,6 +189,14 @@ int32_t find_zero(list<item_t> *items)
     }
     return -1;
 }
+/**
+ * @brief finds the first non-zero value item in list of items starting at index.
+ * searches starts over from begining of list if end is reached and not found.
+ *
+ * @param items ptr to list of items
+ * @param index index to start at
+ * @return int64_t value of found item
+ */
 int64_t first_non_zero(list<item_t> *items, int32_t index)
 {
     auto it = items->begin();
@@ -169,6 +210,11 @@ int64_t first_non_zero(list<item_t> *items, int32_t index)
     }
     return it->value;
 }
+/**
+ * @brief applies decryption key to each item value in list of items
+ *
+ * @param items ptr to list of items
+ */
 void decrypt(list<item_t> *items)
 {
     const int32_t key = 811589153;
@@ -185,6 +231,7 @@ int64_t process_task1(void)
     items->assign(data->begin(), data->end());
     int32_t index = 0;
     item_t item;
+    // print_list(items);
     while (true)
     {
         index = find_next(items, &item);
@@ -192,15 +239,15 @@ int64_t process_task1(void)
             break;
         if (item.value != 0)
             move_item(items, item, index);
+        // print_list(items);
     }
-    print_list(items);
+    // print_list(items);
     index = find_zero(items);
     assert(index >= 0);
     int64_t i1 = first_non_zero(items, index + 1000);
     int64_t i2 = first_non_zero(items, index + 2000);
     int64_t i3 = first_non_zero(items, index + 3000);
 
-    // cout << index << ": " << i1 << ", " << i2 << ", " << i3 << endl;
     delete items;
     return i1 + i2 + i3;
 }
@@ -211,21 +258,22 @@ int64_t process_task2(void)
     decrypt(items);
     int32_t index = 0;
     item_t item;
-    print_list(items);
-    for (int32_t id = 0; id < (int32_t)items->size(); id++)
+
+    for (size_t i = 0; i < 10; i++)
     {
-        index = find_next_id(id, items, &item);
-        assert(index >= 0);
-        if (item.value != 0)
-            move_item(items, item, index);
+        for (int32_t id = 0; id < (int32_t)items->size(); id++)
+        {
+            index = find_next_id(id, items, &item);
+            assert(index >= 0);
+            if (item.value != 0)
+                move_item(items, item, index);
+        }
     }
-    print_list(items);
     index = find_zero(items);
     assert(index >= 0);
     int64_t i1 = first_non_zero(items, index + 1000);
     int64_t i2 = first_non_zero(items, index + 2000);
     int64_t i3 = first_non_zero(items, index + 3000);
-    cout << index << ": " << i1 << ", " << i2 << ", " << i3 << endl;
 
     delete items;
     return i1 + i2 + i3;
@@ -233,15 +281,14 @@ int64_t process_task2(void)
 int main()
 {
     /** use this for testing examples */
-    read_input("test.txt");
+    // read_input("test.txt");
 
     /** use this to run input */
-    // read_input("input.txt");
+    read_input("input.txt");
 
     process_task();
 
     int64_t task1 = process_task1();
-    // int64_t task1 = 0;
     int64_t task2 = process_task2();
 
     /** store output to file */
