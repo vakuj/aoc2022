@@ -156,14 +156,22 @@ public:
             id_b = "";
         }
     }
+    bool is_constant(void) { return fun == fun_t::CON; }
+    string get_depend(bool first = true)
+    {
+        if (first)
+            return id_a;
+        return id_b;
+    }
     bool try_execute(map<string, int64_t> *executed)
     {
-        if (exec)
-            return true;
         if (fun == fun_t::CON)
         {
             exec = true;
-            executed->insert(pair<string, int64_t>(id, value));
+            if (executed->count(id) == 0)
+                executed->insert(pair<string, int64_t>(id, value));
+            else
+                executed->at(id) = value;
             return true;
         }
         if (executed->count(id_a) == 0)
@@ -171,7 +179,12 @@ public:
         if (executed->count(id_b) == 0)
             return false;
         if (execute(executed->at(id_a), executed->at(id_b)))
-            executed->insert(pair<string, int64_t>(id, value));
+        {
+            if (executed->count(id) == 0)
+                executed->insert(pair<string, int64_t>(id, value));
+            else
+                executed->at(id) = value;
+        }
         return exec;
     }
     friend ostream &operator<<(ostream &os, MONKEY &m)
@@ -237,16 +250,15 @@ void process_task()
 }
 int64_t process_task1(void)
 {
-    /** Do something to process the task specific to 1 */
     map<string, int64_t> executed;
     list<MONKEY> pending;
-    auto it = data->begin();
-    while (it != data->end())
+    list<MONKEY> monkeys;
+    monkeys.assign(data->begin(), data->end());
+    auto it = monkeys.begin();
+    while (it != monkeys.end())
     {
         if (!it->try_execute(&executed))
-        {
             pending.push_back(*it);
-        }
         it++;
     }
     MONKEY monkey;
@@ -264,10 +276,143 @@ int64_t process_task1(void)
     assert(executed.count("root") > 0);
     return executed["root"];
 }
+int64_t monkey_fun(int64_t value, list<MONKEY> *exec_order, map<string, int64_t> *executed)
+{
+    auto it = exec_order->begin();
+    while (it != exec_order->end())
+    {
+        if (it->get_id() == "humn")
+            it->set_value(value);
+        it->try_execute(executed);
+        it++;
+    }
+    return executed->at("root");
+}
+int64_t correct_human(list<MONKEY> *exec_order, map<string, int64_t> *executed, int64_t constant = 150)
+{
+    auto f = [exec_order, executed, constant](int64_t x)
+    {
+        return monkey_fun(x, exec_order, executed) - 2 * constant;
+    };
+    cout << constant << endl;
+    int64_t a = (1L << 50), b = -1 * a - 1, c;
+    int64_t fa = f(a), fb = f(b), fc;
+    size_t ctr = 0;
+    while (ctr < 100)
+    {
+        ctr++;
+        c = (a + b) / 2;
+        fc = f(c);
+        cout << ctr << ": " << a << ", " << c << ", " << b;
+        cout << " -> " << fa << ", " << fc << ", " << fb << endl;
+        if (fc == 0)
+            return c;
+        if (fc >= 0)
+        {
+            if (fa >= 0)
+            {
+                a = c;
+                fa = fc;
+            }
+            else
+            {
+                b = c;
+                fb = fc;
+            }
+        }
+        else
+        {
+            if (fa < 0)
+            {
+                a = c;
+                fa = fc;
+            }
+            else
+            {
+                b = c;
+                fb = fc;
+            }
+        }
+    }
+    assert(0 && "fail");
+    return 0;
+}
+
 int64_t process_task2(void)
 {
     /** Do something to process the task specific to 2 */
-    return 0;
+    map<string, int64_t> executed;
+    list<MONKEY> pending;
+    list<MONKEY> exec_order;
+    list<MONKEY> monkeys;
+    monkeys.assign(data->begin(), data->end());
+    MONKEY root;
+    MONKEY humn;
+    auto it = monkeys.begin();
+    while (it != monkeys.end())
+    {
+        if (it->get_id() == "root")
+            root = *it;
+        else if (it->get_id() == "humn")
+            humn = *it;
+        else
+        {
+            if (!it->try_execute(&executed))
+                pending.push_back(*it);
+        }
+        it++;
+    }
+    /** should parse all non humn related monkeys */
+    MONKEY monkey;
+    size_t psize = pending.size();
+    size_t pctr = 0;
+    while (pending.size() > 0)
+    {
+        pctr = 0;
+        while (pctr < psize)
+        {
+            monkey = pending.front();
+            pending.pop_front();
+            if (!monkey.try_execute(&executed))
+                pending.push_back(monkey);
+            pctr++;
+        }
+        if (pending.size() == psize)
+            break;
+        psize = pending.size();
+    }
+    int64_t constant = 0;
+    if (executed.count(root.get_depend()))
+        constant = executed[root.get_depend()];
+    else
+        constant = executed[root.get_depend(false)];
+    assert(constant != 0);
+
+    /** now parse all humn related monkeys and set to exec order as they get executed */
+    humn.try_execute(&executed);
+    exec_order.push_front(humn);
+    while (pending.size() > 0)
+    {
+        monkey = pending.front();
+        pending.pop_front();
+        if (!monkey.try_execute(&executed))
+            pending.push_back(monkey);
+        else
+            exec_order.push_back(monkey);
+    }
+    root.try_execute(&executed);
+    exec_order.push_back(root);
+
+    for (auto it : executed)
+        cout << it.first << ": " << it.second << endl;
+    // string id_a = exec_order->back().get_depend(true);
+    // string id_b = exec_order->back().get_depend(false);
+    // int64_t constant = 0;
+
+    int64_t answer = correct_human(&exec_order, &executed, constant);
+
+    assert(executed.count("root") > 0);
+    return answer;
 }
 int main()
 {
@@ -276,7 +421,7 @@ int main()
 
     /** use this to run input */
     read_input("input.txt");
-    // 571353930 too low
+    // 3582317956032 too high
     process_task();
 
     int64_t task1 = process_task1();
