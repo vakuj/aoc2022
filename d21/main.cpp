@@ -27,10 +27,10 @@ private:
     string id_a;
     string id_b;
     fun_t fun = fun_t::CON;
-    int64_t value;
+    int64_t value = 0;
     bool exec = false;
 
-    bool execute(int32_t a, int32_t b)
+    bool execute(int64_t a, int64_t b)
     {
         exec = true;
         switch (fun)
@@ -140,7 +140,7 @@ public:
     void set_id(string _id) { id = _id; }
     string get_id(void) { return id; }
     bool get_exec(void) { return exec; }
-    void set_value(int32_t _value) { value = _value; }
+    void set_value(int64_t _value) { value = _value; }
     int64_t get_value(void) { return value; }
     void set_fun(fun_t _fun, string _id_a, string _id_b)
     {
@@ -156,14 +156,14 @@ public:
             id_b = "";
         }
     }
-    bool try_execute(map<string, int32_t> *executed)
+    bool try_execute(map<string, int64_t> *executed)
     {
         if (exec)
             return true;
         if (fun == fun_t::CON)
         {
             exec = true;
-            executed->insert(pair<string, int32_t>(id, value));
+            executed->insert(pair<string, int64_t>(id, value));
             return true;
         }
         if (executed->count(id_a) == 0)
@@ -171,7 +171,7 @@ public:
         if (executed->count(id_b) == 0)
             return false;
         if (execute(executed->at(id_a), executed->at(id_b)))
-            executed->insert(pair<string, int32_t>(id, value));
+            executed->insert(pair<string, int64_t>(id, value));
         return exec;
     }
     friend ostream &operator<<(ostream &os, MONKEY &m)
@@ -222,7 +222,7 @@ void read_input(const char *filename)
     delete[] indata;
 }
 
-void write_output(const char *filename, int32_t task1, int32_t task2)
+void write_output(const char *filename, int64_t task1, int64_t task2)
 {
     ofstream ofs(filename, ofstream::out);
     ofs << "Task 1 result: " << task1 << "\n";
@@ -235,16 +235,18 @@ void process_task()
     for (auto it : *data)
         cout << it << endl;
 }
-int32_t process_task1(void)
+int64_t process_task1(void)
 {
     /** Do something to process the task specific to 1 */
-    map<string, int32_t> executed;
+    map<string, int64_t> executed;
     list<MONKEY> pending;
     auto it = data->begin();
     while (it != data->end())
     {
         if (!it->try_execute(&executed))
+        {
             pending.push_back(*it);
+        }
         it++;
     }
     MONKEY monkey;
@@ -259,12 +261,10 @@ int32_t process_task1(void)
     }
     // for (auto it : executed)
     //     cout << it.first << ": " << it.second << endl;
-    if (executed.count("root") == 0)
-        return 0;
-    cout << executed["root"] << endl;
+    assert(executed.count("root") > 0);
     return executed["root"];
 }
-int32_t process_task2(void)
+int64_t process_task2(void)
 {
     /** Do something to process the task specific to 2 */
     return 0;
@@ -279,8 +279,8 @@ int main()
     // 571353930 too low
     process_task();
 
-    int32_t task1 = process_task1();
-    int32_t task2 = process_task2();
+    int64_t task1 = process_task1();
+    int64_t task2 = process_task2();
 
     /** store output to file */
     write_output("output.txt", task1, task2);
