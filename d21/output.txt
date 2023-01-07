@@ -1,2 +1,2 @@
 Task 1 result: 121868120894282
-Task 2 result: 0
+Task 2 result: 3582317956029

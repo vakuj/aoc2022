@@ -28,6 +28,7 @@ private:
     string id_b;
     fun_t fun = fun_t::CON;
     int64_t value = 0;
+    int64_t remainder = 0;
     bool exec = false;
 
     bool execute(int64_t a, int64_t b)
@@ -46,6 +47,7 @@ private:
             break;
         case fun_t::DIV:
             value = a / b;
+            remainder = a % b;
             break;
         default:
             exec = false;
@@ -85,6 +87,14 @@ private:
             str += to_string(value);
         }
         return str;
+    }
+
+    void update_map(map<string, int64_t> *eval)
+    {
+        if (eval->count(id) == 0)
+            eval->insert(pair<string, int64_t>(id, value));
+        else
+            eval->at(id) = value;
     }
 
 public:
@@ -139,24 +149,11 @@ public:
 
     void set_id(string _id) { id = _id; }
     string get_id(void) { return id; }
-    bool get_exec(void) { return exec; }
     void set_value(int64_t _value) { value = _value; }
     int64_t get_value(void) { return value; }
-    void set_fun(fun_t _fun, string _id_a, string _id_b)
-    {
-        fun = _fun;
-        if (_fun != fun_t::CON)
-        {
-            id_a = _id_a;
-            id_b = _id_b;
-        }
-        else
-        {
-            id_a = "";
-            id_b = "";
-        }
-    }
+    int64_t get_remainder(void) { return remainder; }
     bool is_constant(void) { return fun == fun_t::CON; }
+    bool get_exec(void) { return exec; }
     string get_depend(bool first = true)
     {
         if (first)
@@ -168,10 +165,7 @@ public:
         if (fun == fun_t::CON)
         {
             exec = true;
-            if (executed->count(id) == 0)
-                executed->insert(pair<string, int64_t>(id, value));
-            else
-                executed->at(id) = value;
+            update_map(executed);
             return true;
         }
         if (executed->count(id_a) == 0)
@@ -179,12 +173,7 @@ public:
         if (executed->count(id_b) == 0)
             return false;
         if (execute(executed->at(id_a), executed->at(id_b)))
-        {
-            if (executed->count(id) == 0)
-                executed->insert(pair<string, int64_t>(id, value));
-            else
-                executed->at(id) = value;
-        }
+            update_map(executed);
         return exec;
     }
     friend ostream &operator<<(ostream &os, MONKEY &m)
@@ -271,71 +260,88 @@ int64_t process_task1(void)
             pending.push_back(monkey);
         }
     }
-    // for (auto it : executed)
-    //     cout << it.first << ": " << it.second << endl;
     assert(executed.count("root") > 0);
     return executed["root"];
 }
-int64_t monkey_fun(int64_t value, list<MONKEY> *exec_order, map<string, int64_t> *executed)
+pair<int64_t, int64_t> monkey_fun(int64_t value, list<MONKEY> *exec_order, map<string, int64_t> *executed)
 {
     auto it = exec_order->begin();
+    int64_t remainder = 0;
     while (it != exec_order->end())
     {
         if (it->get_id() == "humn")
             it->set_value(value);
         it->try_execute(executed);
+        remainder = it->get_remainder() != 0 ? it->get_remainder() : remainder;
         it++;
     }
-    return executed->at("root");
+    return pair<int64_t, int64_t>(executed->at("root"), remainder);
 }
 int64_t correct_human(list<MONKEY> *exec_order, map<string, int64_t> *executed, int64_t constant = 150)
 {
+    /**
+     * @brief reformulate root expression as f(x) = root(x) - 2*c,
+     * where root(x) = g(x) + c is the original expression, g(x) is
+     * some function dependent on the monkeys reacting to x = humn,
+     * and c is the other monkey for root expression.
+     * This gives f(x) = 0 when g(x) = c.
+     *
+     * @param x humn value
+     * @return pair<int64_t, int64_t> first is the f(x) value, second is non-zero if division occured of any a / b such that a % b != 0.
+     */
     auto f = [exec_order, executed, constant](int64_t x)
     {
-        return monkey_fun(x, exec_order, executed) - 2 * constant;
+        auto fx = monkey_fun(x, exec_order, executed);
+        return pair<int64_t, int64_t>(fx.first - 2 * constant, fx.second);
     };
-    cout << constant << endl;
-    int64_t a = (1L << 50), b = -1 * a - 1, c;
-    int64_t fa = f(a), fb = f(b), fc;
+    int64_t a = (1L << 50), b = -1 * a, c = 0;
+    pair<int64_t, int64_t> fa = f(a), fb = f(b), fc = f(c);
     size_t ctr = 0;
     while (ctr < 100)
     {
         ctr++;
-        c = (a + b) / 2;
+        c = (a >> 1) + (b >> 1);
         fc = f(c);
-        cout << ctr << ": " << a << ", " << c << ", " << b;
-        cout << " -> " << fa << ", " << fc << ", " << fb << endl;
-        if (fc == 0)
-            return c;
-        if (fc >= 0)
+        if ((fc.first == 0) && (fc.second == 0))
+            break; // true root found
+        if (a == c || c == b)
+            break; // tolerance reached, cannot divide a+b any further
+        if ((fc.first >= 0 && fa.first >= 0) || (fc.first < 0 && fa.first < 0))
         {
-            if (fa >= 0)
-            {
-                a = c;
-                fa = fc;
-            }
-            else
-            {
-                b = c;
-                fb = fc;
-            }
+            // f(a) and f(c) of same sign -> set a to c
+            a = c;
+            fa = fc;
         }
         else
         {
-            if (fa < 0)
+            // f(b) and f(c) of same sign -> set b to c
+            b = c;
+            fb = fc;
+        }
+    }
+    if (fc.second != 0) // not a true root search up from root
+    {
+        int64_t tmp = c;
+        while (fc.second != 0) // stop if true root found
+        {
+            fc = f(++c);
+            if (fc.first != 0) // stop if reached upper bound
+                break;
+        }
+        if (fc.second != 0) // still not true root search down from root
+        {
+            c = tmp;
+            while (fc.second != 0) // stop searching if true root found
             {
-                a = c;
-                fa = fc;
-            }
-            else
-            {
-                b = c;
-                fb = fc;
+                fc = f(--c);
+                if (fc.first != 0) // stop if reached lower bound
+                    break;
             }
         }
     }
-    assert(0 && "fail");
-    return 0;
+    assert(!fc.first && "Root not found!");
+    assert(!fc.second && "True root not found!");
+    return c;
 }
 
 int64_t process_task2(void)
@@ -388,6 +394,10 @@ int64_t process_task2(void)
         constant = executed[root.get_depend(false)];
     assert(constant != 0);
 
+    cout << "Constants:\n";
+    for (auto it : executed)
+        cout << it.first << ": " << it.second << endl;
+    cout << "===\n";
     /** now parse all humn related monkeys and set to exec order as they get executed */
     humn.try_execute(&executed);
     exec_order.push_front(humn);
@@ -403,11 +413,10 @@ int64_t process_task2(void)
     root.try_execute(&executed);
     exec_order.push_back(root);
 
-    for (auto it : executed)
-        cout << it.first << ": " << it.second << endl;
-    // string id_a = exec_order->back().get_depend(true);
-    // string id_b = exec_order->back().get_depend(false);
-    // int64_t constant = 0;
+    cout << "EQ system:\n";
+    for (auto it : exec_order)
+        cout << it << endl;
+    cout << "===\n";
 
     int64_t answer = correct_human(&exec_order, &executed, constant);
 
@@ -422,6 +431,7 @@ int main()
     /** use this to run input */
     read_input("input.txt");
     // 3582317956032 too high
+    // 3582317956028 too low
     process_task();
 
     int64_t task1 = process_task1();
