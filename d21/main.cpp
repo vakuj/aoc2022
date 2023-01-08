@@ -188,6 +188,107 @@ int32_t cnt;
 size_t length;
 /** add additional */
 
+/**
+ * @brief Parses ordered list exec_order to calculate root(humn=value). Returns the root value as
+ * well as an indicator non-zero if division occured of any a / b such that a % b != 0.
+ *
+ * @param value to evaluate humn as
+ * @param exec_order ptr to list of of monkeys ordered in execution order, i.e. f0(humn), f1(f0), f2(f1),..., root(fn-1)
+ * @param executed map of monkeys and their current values, updated with each update of a monkey
+ * @return pair<int64_t, int64_t> first root value, second is non-zero if division occured of any a / b such that a % b != 0.
+ */
+pair<int64_t, int64_t> monkey_fun(int64_t value, list<MONKEY> *exec_order, map<string, int64_t> *executed)
+{
+    auto it = exec_order->begin();
+    int64_t remainder = 0;
+    while (it != exec_order->end())
+    {
+        if (it->get_id() == "humn")
+            it->set_value(value);
+        it->try_execute(executed);
+        remainder = it->get_remainder() != 0 ? it->get_remainder() : remainder;
+        it++;
+    }
+    return pair<int64_t, int64_t>(executed->at("root"), remainder);
+}
+/**
+ * @brief Finds the correct value of humn such that the two monkeys of root have the equal values.
+ * Uses bisection method to iterate to a solution. If the found root is false (caused by integer division),
+ * additional checks of nearby solutions are checked for correctness.
+ * Assertions for correctness is made before return.
+ *
+ * @param exec_order ptr to list of of monkeys ordered in execution order, i.e. f0(humn), f1(f0), f2(f1),..., root(fn-1)
+ * @param executed map of monkeys and their current values, updated with each update of a monkey
+ * @param constant the second monkey of root which does not change with humn
+ * @return int64_t the correct value of humn. Assertions catches invalid results.
+ */
+int64_t correct_human(list<MONKEY> *exec_order, map<string, int64_t> *executed, int64_t constant)
+{
+    /**
+     * @brief reformulate root expression as f(x) = root(x) - 2*c,
+     * where root(x) = g(x) + c is the original expression, g(x) is
+     * some function dependent on the list of monkeys reacting to
+     * x = humn, and c is the other monkey for root expression.
+     * This gives f(x) = 0 when g(x) = c.
+     *
+     * @param x humn value
+     * @return pair<int64_t, int64_t> first is the f(x) value, second is non-zero if division occured of any a / b such that a % b != 0.
+     */
+    auto f = [exec_order, executed, constant](int64_t x)
+    {
+        auto fx = monkey_fun(x, exec_order, executed);
+        return pair<int64_t, int64_t>(fx.first - 2 * constant, fx.second);
+    };
+    int64_t a = (1L << 50), b = -1 * a, c = 0;
+    pair<int64_t, int64_t> fa = f(a), fb = f(b), fc = f(c);
+    size_t ctr = 0;
+    while (ctr < 100)
+    {
+        ctr++;
+        c = (a >> 1) + (b >> 1);
+        fc = f(c);
+        if ((fc.first == 0) && (fc.second == 0))
+            break; // true root found
+        if (a == c || c == b)
+            break; // tolerance reached, cannot divide a+b any further
+        if ((fc.first >= 0 && fa.first >= 0) || (fc.first < 0 && fa.first < 0))
+        {
+            // f(a) and f(c) of same sign -> set a to c
+            a = c;
+            fa = fc;
+        }
+        else
+        {
+            // f(b) and f(c) of same sign -> set b to c
+            b = c;
+            fb = fc;
+        }
+    }
+    if (fc.second != 0) // not a true root search up from root
+    {
+        int64_t tmp = c;
+        while (fc.second != 0) // stop if true root found
+        {
+            fc = f(++c);
+            if (fc.first != 0) // stop if reached upper bound
+                break;
+        }
+        if (fc.second != 0) // still not true root search down from root
+        {
+            c = tmp;
+            while (fc.second != 0) // stop searching if true root found
+            {
+                fc = f(--c);
+                if (fc.first != 0) // stop if reached lower bound
+                    break;
+            }
+        }
+    }
+    assert(!fc.first && "Root not found!");
+    assert(!fc.second && "True root not found!");
+    return c;
+}
+
 void read_input(const char *filename)
 {
     ifstream ifs(filename, ifstream::in);
@@ -256,97 +357,14 @@ int64_t process_task1(void)
         monkey = pending.front();
         pending.pop_front();
         if (!monkey.try_execute(&executed))
-        {
             pending.push_back(monkey);
-        }
     }
     assert(executed.count("root") > 0);
     return executed["root"];
 }
-pair<int64_t, int64_t> monkey_fun(int64_t value, list<MONKEY> *exec_order, map<string, int64_t> *executed)
-{
-    auto it = exec_order->begin();
-    int64_t remainder = 0;
-    while (it != exec_order->end())
-    {
-        if (it->get_id() == "humn")
-            it->set_value(value);
-        it->try_execute(executed);
-        remainder = it->get_remainder() != 0 ? it->get_remainder() : remainder;
-        it++;
-    }
-    return pair<int64_t, int64_t>(executed->at("root"), remainder);
-}
-int64_t correct_human(list<MONKEY> *exec_order, map<string, int64_t> *executed, int64_t constant = 150)
-{
-    /**
-     * @brief reformulate root expression as f(x) = root(x) - 2*c,
-     * where root(x) = g(x) + c is the original expression, g(x) is
-     * some function dependent on the monkeys reacting to x = humn,
-     * and c is the other monkey for root expression.
-     * This gives f(x) = 0 when g(x) = c.
-     *
-     * @param x humn value
-     * @return pair<int64_t, int64_t> first is the f(x) value, second is non-zero if division occured of any a / b such that a % b != 0.
-     */
-    auto f = [exec_order, executed, constant](int64_t x)
-    {
-        auto fx = monkey_fun(x, exec_order, executed);
-        return pair<int64_t, int64_t>(fx.first - 2 * constant, fx.second);
-    };
-    int64_t a = (1L << 50), b = -1 * a, c = 0;
-    pair<int64_t, int64_t> fa = f(a), fb = f(b), fc = f(c);
-    size_t ctr = 0;
-    while (ctr < 100)
-    {
-        ctr++;
-        c = (a >> 1) + (b >> 1);
-        fc = f(c);
-        if ((fc.first == 0) && (fc.second == 0))
-            break; // true root found
-        if (a == c || c == b)
-            break; // tolerance reached, cannot divide a+b any further
-        if ((fc.first >= 0 && fa.first >= 0) || (fc.first < 0 && fa.first < 0))
-        {
-            // f(a) and f(c) of same sign -> set a to c
-            a = c;
-            fa = fc;
-        }
-        else
-        {
-            // f(b) and f(c) of same sign -> set b to c
-            b = c;
-            fb = fc;
-        }
-    }
-    if (fc.second != 0) // not a true root search up from root
-    {
-        int64_t tmp = c;
-        while (fc.second != 0) // stop if true root found
-        {
-            fc = f(++c);
-            if (fc.first != 0) // stop if reached upper bound
-                break;
-        }
-        if (fc.second != 0) // still not true root search down from root
-        {
-            c = tmp;
-            while (fc.second != 0) // stop searching if true root found
-            {
-                fc = f(--c);
-                if (fc.first != 0) // stop if reached lower bound
-                    break;
-            }
-        }
-    }
-    assert(!fc.first && "Root not found!");
-    assert(!fc.second && "True root not found!");
-    return c;
-}
 
 int64_t process_task2(void)
 {
-    /** Do something to process the task specific to 2 */
     map<string, int64_t> executed;
     list<MONKEY> pending;
     list<MONKEY> exec_order;
@@ -358,48 +376,51 @@ int64_t process_task2(void)
     while (it != monkeys.end())
     {
         if (it->get_id() == "root")
-            root = *it;
+            root = *it; // store root for later
         else if (it->get_id() == "humn")
-            humn = *it;
+            humn = *it; // store humn for later
         else
         {
             if (!it->try_execute(&executed))
-                pending.push_back(*it);
+                pending.push_back(*it); // store for later if cannot execute now
         }
         it++;
     }
-    /** should parse all non humn related monkeys */
+    /** Parse all non humn related monkeys */
     MONKEY monkey;
     size_t psize = pending.size();
     size_t pctr = 0;
     while (pending.size() > 0)
     {
         pctr = 0;
-        while (pctr < psize)
+        while (pctr < psize) // shrink pending such that only humn related monkies remain
         {
             monkey = pending.front();
             pending.pop_front();
             if (!monkey.try_execute(&executed))
-                pending.push_back(monkey);
+                pending.push_back(monkey); // reinsert if cannot execute now
             pctr++;
         }
         if (pending.size() == psize)
-            break;
+            break; // same size as previous iteration -> cannot shrink more
         psize = pending.size();
     }
-    int64_t constant = 0;
+    /**
+     * Find second monkey of root which is not dependent on humn.
+     * This monkey holds constant value, store this for later.
+     * Assertion to check if constant changed from initial value
+     * is made to ensure that both of root monkeys are not dependent on
+     * humn which would cause method used to find correct humn to fail.
+     */
+    int64_t constant = INT64_MAX;
     if (executed.count(root.get_depend()))
         constant = executed[root.get_depend()];
-    else
+    if (executed.count(root.get_depend(false)))
         constant = executed[root.get_depend(false)];
-    assert(constant != 0);
+    assert(constant != INT64_MAX);
 
-    cout << "Constants:\n";
-    for (auto it : executed)
-        cout << it.first << ": " << it.second << endl;
-    cout << "===\n";
-    /** now parse all humn related monkeys and set to exec order as they get executed */
-    humn.try_execute(&executed);
+    /** Parse all humn related monkeys and set to exec_order as they get executed */
+    humn.try_execute(&executed); // add humn first
     exec_order.push_front(humn);
     while (pending.size() > 0)
     {
@@ -410,18 +431,11 @@ int64_t process_task2(void)
         else
             exec_order.push_back(monkey);
     }
-    root.try_execute(&executed);
+    root.try_execute(&executed); // add root last
     exec_order.push_back(root);
 
-    cout << "EQ system:\n";
-    for (auto it : exec_order)
-        cout << it << endl;
-    cout << "===\n";
-
-    int64_t answer = correct_human(&exec_order, &executed, constant);
-
-    assert(executed.count("root") > 0);
-    return answer;
+    /** now find the answer */
+    return correct_human(&exec_order, &executed, constant);
 }
 int main()
 {
@@ -430,8 +444,7 @@ int main()
 
     /** use this to run input */
     read_input("input.txt");
-    // 3582317956032 too high
-    // 3582317956028 too low
+
     process_task();
 
     int64_t task1 = process_task1();
